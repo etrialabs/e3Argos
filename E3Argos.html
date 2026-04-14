@@ -1,0 +1,2924 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E3Argos</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          etria: {
+            dark:   '#0D0D0D',
+            carbon: '#131313',
+            panel:  '#1A1A1A',
+            border: '#2A2520',
+            border2:'#3A3530',
+            gold:   '#C9A96E',
+            bone:   '#F5F0E8',
+            muted:  '#8A857E',
+            faint:  '#524E4A',
+          }
+        }
+      }
+    }
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root {
+    --e-dark:   #0D0D0D;
+    --e-carbon: #131313;
+    --e-panel:  #1A1A1A;
+    --e-border: #2A2520;
+    --e-border2:#3A3530;
+    --e-gold:   #C9A96E;
+    --e-gold15: rgba(201,169,110,0.15);
+    --e-gold08: rgba(201,169,110,0.08);
+    --e-bone:   #F5F0E8;
+    --e-muted:  #8A857E;
+    --e-faint:  #524E4A;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--e-dark);
+    color: var(--e-bone);
+    font-family: 'Lato', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar { width:5px; height:5px }
+  ::-webkit-scrollbar-track { background: var(--e-dark) }
+  ::-webkit-scrollbar-thumb { background: var(--e-border2); border-radius:3px }
+
+  .section-title {
+    font-family: 'Lato', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--e-muted);
+    text-transform: uppercase;
+  }
+
+  .card {
+    background: var(--e-carbon);
+    border: 1px solid var(--e-border);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--e-border2); }
+  .card-gold  { box-shadow: 0 0 18px var(--e-gold08); }
+
+  .flash-up   { animation: flashUp   0.6s ease-out; }
+  .flash-down { animation: flashDown 0.6s ease-out; }
+  @keyframes flashUp   { 0%{background:#052e16} 100%{background:transparent} }
+  @keyframes flashDown { 0%{background:#3b0000} 100%{background:transparent} }
+  .price-up  { color:#10b981 }
+  .price-down{ color:#ef4444 }
+  .price-neu { color:var(--e-muted) }
+
+  .tab-on {
+    border-bottom: 2px solid var(--e-gold) !important;
+    color: var(--e-gold) !important;
+    background: var(--e-carbon) !important;
+  }
+  .tab-off { color: var(--e-faint); }
+  .tab-off:hover { color: var(--e-muted); background: rgba(201,169,110,0.04); }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .ws-live { background:#10b981; animation:blink 2s infinite }
+  .ws-dead { background:#ef4444 }
+
+  @keyframes pulse-border {
+    0%,100%{border-color:#f97316;box-shadow:0 0 0 0 rgba(249,115,22,.5)}
+    50%{border-color:#ea580c;box-shadow:0 0 0 6px rgba(249,115,22,.1)}
+  }
+  .dev-alert { animation:pulse-border 1.8s infinite; border:1px solid #f97316 !important; }
+
+  input[type=range] { -webkit-appearance:none; background:transparent; width:100%; cursor:pointer }
+  input[type=range]::-webkit-slider-runnable-track { background:var(--e-border); height:3px; border-radius:2px; }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; height:13px; width:13px;
+    border-radius:50%; background:var(--e-gold); margin-top:-5px;
+    border:2px solid var(--e-dark); transition:transform 0.1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform:scale(1.2); }
+  input[type=range]:focus { outline:none }
+
+  .sl-wrap { position:relative; padding:4px 0 }
+  .sl-notch {
+    position:absolute; top:50%; transform:translate(-50%,-50%);
+    width:3px; height:18px; background:var(--e-muted); border-radius:2px;
+    pointer-events:none; display:none;
+  }
+
+  .mono { font-family: ui-monospace,'Cascadia Mono','Consolas','Courier New',monospace; letter-spacing:-0.01em; }
+
+  .l-buy  { }
+  .l-sell { }
+  .l-reb  { }
+  .l-init { }
+
+  .ob-buy  { color:#10b981 }
+  .ob-sell { color:#ef4444 }
+
+  .metric-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:0.75rem;
+  }
+
+  .main-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:auto auto;
+    gap:1rem;
+    align-items:stretch;
+  }
+  @media(max-width:900px){
+    .main-grid { grid-template-columns:1fr; grid-template-rows:auto; }
+    .main-grid>*[style*="grid-column"],
+    .main-grid>*[style*="grid-row"] { grid-column:1!important; grid-row:auto!important; }
+  }
+
+  .cap-input {
+    background:var(--e-dark); border:1px solid var(--e-border); border-radius:4px;
+    color:var(--e-gold); font-family:'Courier New',monospace;
+    font-size:0.75rem; font-weight:700; text-align:right;
+    width:52px; padding:2px 6px; outline:none; transition:border-color .2s;
+  }
+  .cap-input:focus { border-color:var(--e-gold); }
+  .cap-input.w-error { border-color:#ef4444; color:#ef4444; }
+
+  @keyframes slide-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+  .w-alert { animation:slide-in .25s ease-out; }
+
+  .cfg-row { border-bottom:1px solid var(--e-dark); padding:0.6rem 0.75rem; display:flex; align-items:center; gap:0; }
+  .cfg-row:last-child { border-bottom:none; }
+  .cfg-asset-name { width:80px; display:flex; align-items:center; gap:6px; font-size:0.8rem; font-weight:700; }
+  .cfg-col-label  { font-size:0.65rem; color:var(--e-faint); white-space:nowrap; }
+  .cfg-val-label  { font-size:0.75rem; font-weight:600; color:var(--e-gold); white-space:nowrap; min-width:40px; text-align:right; }
+  .cfg-section    { flex:1; display:flex; flex-direction:column; gap:2px; padding:0 10px; }
+  .cfg-section.cap{ flex:0 0 140px; padding-right:16px; }
+
+  /* ── Tailwind overrides → Étria palette ── */
+  .bg-gray-950,.bg-gray-950\/95   { background-color:var(--e-dark)!important; }
+  .bg-gray-900,.bg-gray-900\/40   { background-color:var(--e-carbon)!important; }
+  .bg-gray-800\/30                { background-color:rgba(42,37,32,0.3)!important; }
+  .bg-gray-800\/20                { background-color:rgba(42,37,32,0.2)!important; }
+  .bg-gray-800                    { background-color:var(--e-panel)!important; }
+  .border-gray-800                { border-color:var(--e-border)!important; }
+  .border-gray-800\/40            { border-color:rgba(42,37,32,0.4)!important; }
+  .border-gray-800\/60            { border-color:rgba(42,37,32,0.6)!important; }
+  .border-gray-700                { border-color:var(--e-border2)!important; }
+  .border-gray-600                { border-color:#4a4640!important; }
+  .text-gray-200                  { color:var(--e-bone)!important; }
+  .text-gray-300                  { color:#DDD8D0!important; }
+  .text-gray-400                  { color:var(--e-muted)!important; }
+  .text-gray-500                  { color:#6B6560!important; }
+  .text-gray-600                  { color:var(--e-faint)!important; }
+  .text-gray-700                  { color:#403C38!important; }
+  .text-cyan-400                  { color:var(--e-gold)!important; }
+  .border-cyan-800                { border-color:rgba(201,169,110,0.35)!important; }
+  .border-cyan-700                { border-color:rgba(201,169,110,0.5)!important; }
+  .bg-cyan-900\/30                { background-color:var(--e-gold15)!important; }
+  .bg-cyan-950                    { background-color:rgba(201,169,110,0.08)!important; }
+  .hover\:text-cyan-400:hover    { color:var(--e-gold)!important; }
+  .hover\:border-cyan-800:hover  { border-color:rgba(201,169,110,0.4)!important; }
+  .focus\:border-cyan-700:focus  { border-color:rgba(201,169,110,0.6)!important; }
+
+  .etria-header {
+    position:sticky; top:0; z-index:50;
+    background:rgba(13,13,13,0.96);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--e-border);
+    padding:0.5rem 1rem;
+  }
+  .gold-accent { color:var(--e-gold); }
+
+  .kpi-val {
+    font-family:'Courier New',monospace;
+    font-size:clamp(1.1rem,2.5vw,1.5rem);
+    font-weight:700;
+    letter-spacing:0.02em;
+  }
+
+  .btn-ghost {
+    padding:0.25rem 0.75rem; font-size:0.75rem;
+    border:1px solid var(--e-border); border-radius:4px;
+    color:var(--e-faint); background:transparent;
+    transition:color .2s,border-color .2s; cursor:pointer;
+  }
+  .btn-ghost:hover { color:var(--e-gold); border-color:rgba(201,169,110,0.4); }
+
+  .btn-danger {
+    display:flex; align-items:center; gap:4px;
+    padding:0.25rem 0.75rem; font-size:0.75rem;
+    background:rgba(127,29,29,0.3); border:1px solid rgba(239,68,68,0.4);
+    color:#fca5a5; border-radius:4px; cursor:pointer; transition:background .2s;
+  }
+  .btn-danger:hover { background:rgba(127,29,29,0.5); }
+
+  .sim-banner {
+    background:rgba(120,53,15,0.3);
+    border-bottom:1px solid rgba(180,83,9,0.3);
+    padding:0.3rem 1rem; text-align:center;
+    font-size:0.7rem; letter-spacing:0.1em; color:#fbbf24;
+  }
+
+  .period-btn { padding:0.2rem 0.4rem; font-size:0.7rem; border-radius:3px; color:var(--e-faint); cursor:pointer; transition:color .15s; }
+  .period-btn:hover { color:var(--e-muted); }
+  .period-btn.active { font-weight:700; color:var(--e-gold); background:var(--e-gold15); }
+
+  @media(max-width:640px){
+    .metric-grid { grid-template-columns:1fr 1fr; }
+    .kpi-val { font-size:1rem; }
+    .hide-mobile { display:none!important; }
+  }
+  @media(max-width:400px){
+    .metric-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body class="min-h-screen text-gray-200">
+
+<!-- HEADER -->
+<header class="etria-header">
+  <div class="flex items-center justify-between gap-2 flex-wrap">
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <div id="ws-dot" class="w-2 h-2 rounded-full ws-dead"></div>
+        <span id="ws-label" class="text-xs text-gray-500">Conectando…</span>
+      </div>
+      <div class="hide-mobile flex items-center gap-2 border-l border-gray-800 pl-3">
+        <div id="sync-dot" class="w-2 h-2 rounded-full bg-gray-700"></div>
+        <span id="sync-label" class="text-xs text-gray-600">Estado: —</span>
+      </div>
+      <div class="hide-mobile flex items-center gap-2 border-l border-gray-800 pl-3">
+        <div id="cloud-dot" class="w-2 h-2 rounded-full bg-gray-700"></div>
+        <span id="cloud-label" class="text-xs text-gray-600">Cloud: —</span>
+        <span id="tier-badge" class="hidden text-xs font-bold px-1.5 py-0.5 rounded border"></span>
+      </div>
+      <span class="hidden lg:block border-l border-gray-800 pl-3 text-sm tracking-widest gold-accent font-semibold" style="font-family:'Cormorant Garamond',serif">
+        E3ARGOS
+      </span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="ts-update" class="text-xs text-gray-600 mono hide-mobile">--:--:--</span>
+      <button id="sync-btn" onclick="fetchCloudConfig()" class="btn-ghost">
+        <i data-lucide="cloud" class="w-3 h-3 inline mr-1"></i>Sync
+      </button>
+      <button onclick="doReset()" class="btn-danger">
+        <i data-lucide="rotate-cw" class="w-3 h-3"></i>Reset t₀
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- BANNERS -->
+<div class="sim-banner">
+  <i data-lucide="zap" class="w-3 h-3 inline mr-1"></i>
+  SIMULATION MODE · Spot ×1 · Sin conexión a exchange · Los resultados son estimaciones
+</div>
+<div id="file-protocol-banner" class="hidden bg-blue-950/80 border-b border-blue-700/50 px-4 py-1.5 text-center text-xs text-blue-300 tracking-wide">
+  ⚠ Abierto como archivo local — el sync con Google Sheets requiere un servidor web.
+  Abre Terminal y ejecuta: <code class="bg-blue-900/50 px-1.5 py-0.5 rounded font-mono text-blue-200">cd ~/Desktop && python3 -m http.server 8080</code>
+  · luego visita <code class="bg-blue-900/50 px-1.5 py-0.5 rounded font-mono text-blue-200">http://localhost:8080/E3Argos.html</code>
+</div>
+<div id="defensive-banner" class="hidden bg-red-950/80 border-b border-red-700/50 px-4 py-1.5 text-center text-xs text-red-300 font-bold tracking-widest animate-pulse">
+  <i data-lucide="shield" class="w-3 h-3 inline mr-1"></i>
+  MODO DEFENSIVO ACTIVADO — El optimizer recomienda 100% USDT — Grid en pausa
+</div>
+
+<!-- TABS -->
+<div class="border-b border-gray-800 bg-gray-950 overflow-x-auto">
+  <div class="flex" id="tab-bar">
+    <button id="tab-GLOBAL" onclick="switchTab('GLOBAL')"
+      class="tab-on px-4 py-2.5 text-xs font-bold tracking-wider whitespace-nowrap transition">
+      <i data-lucide="globe" class="w-3 h-3 inline mr-1.5"></i>GLOBAL
+    </button>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="p-3 max-w-screen-2xl mx-auto">
+  <div id="view-GLOBAL">
+
+    <!-- KPI Row -->
+    <div class="metric-grid mb-4">
+      <div class="card card-gold p-3">
+        <div class="section-title mb-2">Patrimonio Total</div>
+        <div class="flex items-baseline justify-between gap-2">
+          <div id="kpi-total"   class="kpi-val">€1,000.00</div>
+          <div id="kpi-total-p" class="kpi-val text-gray-500 text-right">+0.00%</div>
+        </div>
+        <div id="kpi-total-date" class="flex justify-end gap-1 text-xs mt-1 text-gray-600">
+          <span>desde</span><span>t₀</span>
+        </div>
+      </div>
+      <div class="card p-3">
+        <div class="section-title mb-2">Grid Profit Real</div>
+        <div id="kpi-gp"     class="kpi-val text-emerald-400">€0.00</div>
+        <div id="kpi-trades" class="text-xs mt-1 text-gray-500">0 trades</div>
+      </div>
+      <div class="card p-3">
+        <div class="section-title mb-2">Comisiones</div>
+        <div id="kpi-fees" class="kpi-val text-gray-400">€0.00</div>
+        <div class="text-xs mt-1 text-gray-600">coste total e3Argos</div>
+      </div>
+      <div class="card p-3">
+        <div class="section-title mb-2">Floating PnL</div>
+        <div class="flex items-baseline justify-between gap-2">
+          <div id="kpi-float"   class="kpi-val">€0.00</div>
+          <div id="kpi-float-p" class="kpi-val text-gray-500 text-right">0.00%</div>
+        </div>
+        <div id="kpi-float-date" class="flex justify-end gap-1 text-xs mt-1 text-gray-600">
+          <span>desde</span><span>t₀</span>
+        </div>
+      </div>
+      <div class="card card-gold p-3">
+        <div class="flex justify-between section-title mb-2">
+          <span>Alpha vs Hold</span><span>Alpha vs BTC</span>
+        </div>
+        <div class="flex items-baseline justify-between gap-3">
+          <div id="kpi-alpha"     class="kpi-val text-cyan-400">0.00%</div>
+          <div id="kpi-alpha-btc" class="kpi-val text-orange-400 text-right">—</div>
+        </div>
+        <div class="flex justify-between text-xs mt-1 text-gray-500">
+          <span id="kpi-hold-p">Hold: 0.00%</span>
+          <span id="kpi-btc-p" class="text-right">BTC: —</span>
+        </div>
+      </div>
+      <div class="card p-3" id="optimizer-card">
+        <div class="section-title mb-1">Último Ciclo Optimizer</div>
+        <div class="kpi-val text-gray-600">—</div>
+        <div class="text-xs text-gray-600 mt-1">Sin datos cloud</div>
+      </div>
+    </div>
+
+    <!-- Equity Curve -->
+    <div class="card p-4 mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 class="section-title">Equity Curve — e3Argos vs Hold</h3>
+        <div class="flex items-center gap-4 flex-wrap">
+          <div class="flex gap-0.5">
+            <button onclick="setGlobalEqPeriod('12h')" id="eq-btn-12h" class="period-btn">12h</button>
+            <button onclick="setGlobalEqPeriod('24h')" id="eq-btn-24h" class="period-btn active">24h</button>
+            <button onclick="setGlobalEqPeriod('7d')"  id="eq-btn-7d"  class="period-btn">7d</button>
+            <button onclick="setGlobalEqPeriod('1m')"  id="eq-btn-1m"  class="period-btn">1m</button>
+            <button onclick="setGlobalEqPeriod('12m')" id="eq-btn-12m" class="period-btn">12m</button>
+          </div>
+          <div class="flex gap-3 text-xs text-gray-500">
+            <span class="flex items-center gap-1"><span class="inline-block w-4 h-0.5" style="background:var(--e-gold)"></span>e3Argos</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-4 h-0.5 bg-gray-600"></span>Hold</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-4" style="border-top:2px dashed #f7931a"></span>BTC 100%</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-4 text-xs mb-2">
+        <span class="text-gray-600">e3Argos: <span id="eq-pnl-bot"  class="mono font-semibold text-gray-500">—</span></span>
+        <span class="text-gray-600">Hold: <span id="eq-pnl-hold" class="mono font-semibold text-gray-500">—</span></span>
+      </div>
+      <canvas id="eq-chart" height="100"></canvas>
+    </div>
+
+    <!-- 3-Panel Grid -->
+    <div class="main-grid mb-4">
+
+      <!-- Configuración Cartera -->
+      <div class="card flex flex-col" id="cfg-cartera-card" style="grid-column:1; grid-row:1/3;">
+        <div class="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-800 flex-shrink-0">
+          <h3 class="section-title">Configuración Cartera</h3>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-600">Total:
+              <span id="cfg-total-pct" class="font-bold text-emerald-400 mono">100%</span>
+            </span>
+            <div id="cfg-weight-alert" class="hidden w-alert flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-950 border border-red-700/50 text-red-400">
+              <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+              <span id="cfg-weight-msg">Los pesos no suman 100%</span>
+            </div>
+          </div>
+        </div>
+        <div class="cfg-row flex-shrink-0" style="background:rgba(201,169,110,0.03);border-bottom:1px solid var(--e-border)">
+          <div class="cfg-asset-name"><span class="text-gray-600 text-xs">ACTIVO</span></div>
+          <div class="cfg-section cap"><span class="cfg-col-label">Cap%</span></div>
+          <div class="cfg-section"><span class="cfg-col-label">% Reserva</span></div>
+          <div class="cfg-section"><span class="cfg-col-label">Prof%</span></div>
+        </div>
+        <div id="cfg-rows" class="flex-1"></div>
+      </div>
+
+      <!-- Resumen de Activos -->
+      <div class="card flex flex-col" style="grid-column:2; grid-row:1;">
+        <div class="px-4 pt-3 pb-2 border-b border-gray-800 flex-shrink-0">
+          <h3 class="section-title">
+            <i data-lucide="trending-up" class="w-3 h-3 inline mr-1 gold-accent"></i>Resumen de Activos
+          </h3>
+        </div>
+        <div class="flex-1 overflow-x-auto p-3">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-gray-600 border-b border-gray-800">
+                <th class="text-left py-2 pr-2">ACTIVO</th>
+                <th class="text-right py-2 pr-2">PRECIO</th>
+                <th class="text-right py-2 pr-2">PESO</th>
+                <th class="text-right py-2 pr-2">V.ACTIVO</th>
+                <th class="text-right py-2 pr-2">RESERVA</th>
+                <th class="text-right py-2 pr-2">GRID €</th>
+                <th class="text-right py-2 pr-2">FLOAT</th>
+                <th class="text-right py-2">TRD</th>
+              </tr>
+            </thead>
+            <tbody id="tbl-summary"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Stress + Distribución -->
+      <div style="grid-column:2; grid-row:2; display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:stretch;">
+
+        <div class="card flex flex-col">
+          <div class="px-4 pt-3 pb-2 border-b border-gray-800 flex-shrink-0">
+            <h3 class="section-title">
+              <i data-lucide="activity" class="w-3 h-3 inline mr-1" style="color:#ef4444"></i>Stress Test
+            </h3>
+          </div>
+          <div class="flex-1 overflow-x-auto p-3">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-gray-600 border-b border-gray-800">
+                  <th class="text-left py-1.5">CAÍDA</th>
+                  <th class="text-right py-1.5">BOT €</th>
+                  <th class="text-right py-1.5">BOT %</th>
+                  <th class="text-right py-1.5">HOLD €</th>
+                  <th class="text-right py-1.5">VENTAJA</th>
+                </tr>
+              </thead>
+              <tbody id="tbl-stress"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Donut — ring izquierda + leyenda derecha -->
+        <div class="card flex flex-col overflow-hidden">
+          <div class="px-4 pt-3 pb-2 border-b border-gray-800 flex-shrink-0">
+            <h3 class="section-title">
+              <i data-lucide="pie-chart" class="w-3 h-3 inline mr-1 gold-accent"></i>Distribución
+            </h3>
+          </div>
+          <div class="flex flex-row items-center gap-3 px-3 py-3">
+            <!-- Donut: izquierda, más grande -->
+            <div class="relative flex-shrink-0" style="width:168px; height:168px;">
+              <canvas id="dist-chart" style="position:absolute;inset:0;width:100%!important;height:100%!important"></canvas>
+            </div>
+            <!-- Leyenda: derecha, columna única -->
+            <div id="dist-legend" class="flex-1 flex flex-col justify-center" style="gap:4px;"></div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /main-grid -->
+
+    <!-- Niveles + Trade Ledger -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="section-title">
+            <i data-lucide="layers" class="w-3 h-3 inline mr-1 gold-accent"></i>Niveles de Activación
+          </h3>
+          <span class="text-xs text-gray-600">pRef → compra / venta activos</span>
+        </div>
+        <table class="w-full text-xs" style="table-layout:fixed">
+          <colgroup>
+            <col style="width:18%"><col style="width:22%">
+            <col style="width:28%"><col style="width:22%"><col style="width:10%">
+          </colgroup>
+          <thead>
+            <tr class="text-gray-500 border-b border-gray-800">
+              <th class="text-left py-1.5">ACTIVO<br><span class="text-gray-700 font-normal normal-case tracking-normal">P.REF</span></th>
+              <th class="text-right py-1.5 pr-2">◀ COMPRA<br><span class="text-gray-700 font-normal">dist</span></th>
+              <th class="text-center py-1.5 px-2">PROXIMIDAD</th>
+              <th class="text-left py-1.5 pl-2">VENTA ▶<br><span class="text-gray-700 font-normal">dist</span></th>
+              <th class="text-right py-1.5">±%</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-levels"></tbody>
+        </table>
+      </div>
+
+      <div class="card p-4 flex flex-col">
+        <div class="flex items-center justify-between mb-2 flex-shrink-0">
+          <h3 class="section-title">
+            <i data-lucide="list" class="w-3 h-3 inline mr-1 gold-accent"></i>Trade Ledger
+          </h3>
+          <div class="flex items-center gap-3">
+            <span id="ledger-gp-hdr" class="text-xs text-emerald-400 mono"></span>
+            <span id="ledger-cnt" class="text-xs text-gray-600">0 ops</span>
+          </div>
+        </div>
+        <div id="ledger-stats" class="flex gap-4 text-xs text-gray-500 pb-2 mb-1 border-b border-gray-800 flex-shrink-0"></div>
+        <div class="grid text-[10px] text-gray-600 py-1 mb-1 border-b border-gray-800/60 flex-shrink-0"
+          style="grid-template-columns:18px 36px 52px 1fr 1fr 56px 52px 34px;gap:0 6px;align-items:center">
+          <span></span><span>ACTIVO</span><span>TIPO</span>
+          <span class="text-right">PRECIO</span><span class="text-right">CANTIDAD</span>
+          <span class="text-right">COMISIÓN</span><span class="text-right">PnL</span><span class="text-right">HORA</span>
+        </div>
+        <div id="ledger" class="overflow-y-auto flex-1 min-h-0 space-y-px text-xs" style="max-height:320px">
+          <div class="text-gray-600 text-center py-6">Esperando datos de mercado…</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Grid Optimizer -->
+    <div class="mb-4">
+      <div class="card p-4" id="optimizer-card">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="section-title">
+            <i data-lucide="settings-2" class="w-3 h-3 inline mr-1 gold-accent"></i>Grid Optimizer
+          </h3>
+          <button onclick="toggleOptimizer()" class="btn-ghost" id="opt-toggle">
+            <i data-lucide="chevron-down" class="w-3 h-3 inline mr-1"></i>Expandir
+          </button>
+        </div>
+        <div id="opt-panel" class="hidden">
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div>
+              <textarea id="opt-json" rows="6"
+                class="w-full rounded text-xs p-2 font-mono resize-none focus:outline-none"
+                style="background:var(--e-dark);border:1px solid var(--e-border);color:var(--e-bone)"
+                placeholder='{"BTC":{"weight":0.35,"reserve":0.42,"profit":0.007}}'></textarea>
+              <div class="flex gap-2 mt-2">
+                <button onclick="parseOptimizer()" class="flex-1 py-1.5 text-xs rounded transition"
+                  style="background:rgba(201,169,110,0.08);border:1px solid rgba(201,169,110,0.3);color:var(--e-gold)">
+                  <i data-lucide="download" class="w-3 h-3 inline mr-1"></i>Procesar JSON
+                </button>
+                <button onclick="syncOptimizer()" id="opt-sync" class="flex-1 py-1.5 text-xs rounded transition hidden"
+                  style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);color:#10b981">
+                  <i data-lucide="zap" class="w-3 h-3 inline mr-1"></i>Sincronizar
+                </button>
+              </div>
+            </div>
+            <div id="opt-status" class="text-xs space-y-0.5 rounded p-3" style="background:rgba(201,169,110,0.04)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /view-GLOBAL -->
+  <div id="asset-views"></div>
+</div><!-- /content -->
+
+<!-- SCRIPTS -->
+<script>
+// ================================================================
+//  CONSTANTS & CONFIG
+// ================================================================
+const COMMISSION  = 0.0005;   // 0.05%
+const INIT_CAP    = 1000;     // €
+const EQ_INTERVAL   = 5000;    // equity sample ms
+const MAX_EQ_PTS    = 300;     // chart points (legacy)
+const MAX_EQ_STORED = 17280;   // ~24h at 5s — max stored points
+const EQ_PERIODS    = { '12h':43200000,'24h':86400000,'7d':604800000,'1m':2592000000,'12m':31536000000 };
+
+// ── Cloud Sync (estado) ─────────────────────────────────────────
+// Google Sheets (publicado como CSV): columnas A=clave, B=valor
+const GSHEET_URL     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSHYyD0V-4kaMF7Gv5S5vtSnN8y5DLqfD3_iPd1eX8vV1rSZtGJiV64psFjmORhtA/pub?output=csv';
+const WEBHOOK_URL    = 'https://hook.eu1.make.com/hs33p61joqpwbsgn8mn4rda3rjal7e5h';
+const SYNC_DEBOUNCE  = 4000;   // ms de espera antes de enviar al webhook (anti-spam)
+const BACKFILL_TF    = '1m';   // timeframe para reconstrucción de historial
+const BACKFILL_LIMIT = 1000;   // max velas por petición a Binance
+const BACKFILL_GAP   = 120000; // ms mínimo de gap para activar backfill (2 min)
+
+// ── Cloud Optimizer Config ──────────────────────────────────────
+const SHEETS_CSV_URL        = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSHYyD0V-4kaMF7Gv5S5vtSnN8y5DLqfD3_iPd1eX8vV1rSZtGJiV64psFjmORhtA/pub?output=csv';
+const CLOUD_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000;  // re-fetch cada 4h
+const ASSET_COLORS = {
+  BTC:'#f7931a', ETH:'#627eea', SOL:'#9945ff', XRP:'#00aae4', ONDO:'#3b82f6',
+  BNB:'#f3ba2f', ADA:'#0033ad', DOT:'#e6007a',  LINK:'#2a5ada', AVAX:'#e84142',
+  DOGE:'#c2a633', MATIC:'#8247e5', UNI:'#ff007a', ATOM:'#2e3148', LTC:'#838383',
+};
+
+// ── CFG: fallback hardcodeado (se sobreescribe con fetchCloudConfig) ──
+let CFG = {
+  BTC:  { sym:'BTCUSDT',  w:0.30, res:0.40, pft:0.006, col:'#f7931a', alloc:300 },
+  ETH:  { sym:'ETHUSDT',  w:0.25, res:0.45, pft:0.007, col:'#627eea', alloc:250 },
+  SOL:  { sym:'SOLUSDT',  w:0.20, res:0.50, pft:0.010, col:'#9945ff', alloc:200 },
+  XRP:  { sym:'XRPUSDT',  w:0.15, res:0.55, pft:0.008, col:'#00aae4', alloc:150 },
+  ONDO: { sym:'ONDOUSDT', w:0.10, res:0.60, pft:0.015, col:'#3b82f6', alloc:100 },
+};
+
+// ================================================================
+//  STATE
+// ================================================================
+const S = {
+  prices:     {},   // key → current price
+  prevPrices: {},   // key → previous price (for flash)
+  t0Prices:   {},   // key → price at t0
+  t0Time:     null,
+
+  assets: {},           // key → asset runtime object
+  trades: [],           // trade ledger (newest first)
+  archivedTrades: [],   // trades de ciclos anteriores del optimizer
+
+  eqChart:    null,
+  distChart:  null,
+  eqTimer:    null,
+  ws:         null,
+  wsTimer:    null,
+
+  eqPeriod:    '24h',  // selected period for global chart
+  eqTimes:     [],     // stored timestamps (ms)
+  eqBot:       [],     // stored bot total values
+  eqHold:      [],     // stored hold total values
+  eqBtc:       [],     // stored BTC 100%-hold values
+  btcHoldQty:  0,      // qty BTC si se hubiese invertido todo INIT_CAP en BTC al t0
+
+  optimizer:    null,
+
+  // Cloud sync (estado)
+  syncStatus:   'idle',  // 'idle'|'loading'|'backfill'|'syncing'|'ok'|'error'
+  lastSyncTs:   0,       // ms timestamp of last successful cloud sync
+  syncTimer:    null,    // debounce handle
+
+  // Cloud optimizer config
+  cloudMeta:    null,    // { timestamp, tier, capital_eur, top_n, defensive_mode }
+  cloudSyncTs:  0,       // ms timestamp del último fetch de optimizer
+};
+
+// ================================================================
+//  ASSET STATE FACTORY
+// ================================================================
+function makeAsset(key) {
+  const c = CFG[key];
+  const alloc = (c.alloc !== undefined) ? c.alloc : INIT_CAP * c.w;
+  return {
+    key, sym:c.sym, col:c.col,
+    weight: c.w, reserve: c.res, profit: c.pft,
+
+    alloc,                          // € total assigned
+    activeVal: alloc*(1-c.res),     // € in crypto position
+    reserveVal: alloc*c.res,        // € in stablecoin reserve
+
+    qty: 0,           // crypto quantity
+    t0Price: 0,
+    pRef: 0,          // ★ Precio de referencia (último nivel ejecutado o t0)
+    buyLevel:  0,     // pRef * (1 - profit)  — ESTÁTICO hasta ejecución
+    sellLevel: 0,     // pRef * (1 + profit)  — ESTÁTICO hasta ejecución
+    targetValue: 0,   // CPV target
+
+    gridProfit: 0,    // realized grid profit (net)
+    tradeCount: 0,
+
+    holdQty: 0,       // fixed buy-and-hold qty
+
+    recWeight:  null,
+    recReserve: null,
+    recProfit:  null,
+
+    eqChart:  null,    // per-asset Chart.js instance
+    eqPeriod: '24h',   // selected period for this asset chart
+    eqTimes:  [],      // stored timestamps (ms)
+    eqBot:    [],      // stored bot values
+    eqHold:   [],      // stored hold values
+  };
+}
+
+Object.keys(CFG).forEach(k => { S.assets[k] = makeAsset(k); });
+
+// ================================================================
+//  UTILITIES
+// ================================================================
+function fmtDate(d) {
+  if(!d) return 't₀';
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
+function hexAlpha(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function f2(n)  { return isFinite(n) ? n.toFixed(2) : '0.00'; }
+function f4(n)  { return isFinite(n) ? n.toFixed(4) : '0.0000'; }
+function f6(n)  { return isFinite(n) ? n.toFixed(6) : '0.000000'; }
+function pf(p)  { return p>999 ? f2(p) : p>0.99 ? f4(p) : f6(p); }   // price format
+function euro(n){ return (n>=0?'+':'-')+'€'+f2(Math.abs(n)); }
+function pct(n) { return (n>=0?'+':'-')+f2(Math.abs(n*100))+'%'; }
+function col(n) { return n>=0?'text-emerald-400':'text-red-400'; }
+function $id(id){ return document.getElementById(id); }
+function setHTML(id,h){ const e=$id(id); if(e) e.innerHTML=h; }
+function setCls(id,c) { const e=$id(id); if(e) e.className=c; }
+
+// ================================================================
+//  HELPER — Fija pRef y recalcula niveles estáticos
+// ================================================================
+// Llama esto SÓLO en t0, reset, o cambio manual de parámetros.
+// NUNCA durante la ejecución normal del grid (ahí se asigna el
+// nivel exacto de la orden disparada, no el precio spot actual).
+function setPRef(a, price) {
+  a.pRef      = price;
+  a.buyLevel  = price * (1 - a.profit);
+  a.sellLevel = price * (1 + a.profit);
+}
+
+// ================================================================
+//  WEBSOCKET
+// ================================================================
+function connectWS() {
+  const streams = Object.values(CFG).map(c=>c.sym.toLowerCase()+'@ticker').join('/');
+  const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+
+  if(S.ws){ try{S.ws.close()}catch(e){} }
+
+  S.ws = new WebSocket(url);
+
+  S.ws.onopen = () => {
+    $id('ws-dot').className  = 'w-2 h-2 rounded-full ws-live';
+    $id('ws-label').textContent = 'LIVE';
+    if(S.wsTimer){ clearTimeout(S.wsTimer); S.wsTimer=null; }
+  };
+
+  S.ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if(!msg.data) return;
+    const d = msg.data;
+    const sym = d.s;
+    const price = parseFloat(d.c);
+    const key = Object.keys(CFG).find(k=>CFG[k].sym===sym);
+    if(!key || !isFinite(price) || price<=0) return;
+
+    S.prevPrices[key] = S.prices[key] || price;
+    S.prices[key] = price;
+
+    // First tick: init t0
+    if(!S.t0Prices[key]){
+      S.t0Prices[key] = price;
+      initAsset(key, price);
+    }
+
+    runGrid(key, price);
+    renderUI();
+    $id('ts-update').textContent = new Date().toLocaleTimeString('es-ES');
+  };
+
+  S.ws.onclose = () => {
+    $id('ws-dot').className  = 'w-2 h-2 rounded-full ws-dead';
+    $id('ws-label').textContent = 'Reconectando…';
+    S.wsTimer = setTimeout(connectWS, 3500);
+  };
+
+  S.ws.onerror = () => { try{S.ws.close()}catch(e){} };
+}
+
+// ================================================================
+//  ASSET INITIALIZATION (t0)
+// ================================================================
+function initAsset(key, price) {
+  const a = S.assets[key];
+  if(a.t0Price > 0) return;
+
+  a.t0Price = price;
+  setPRef(a, price);            // ★ fija pRef y calcula niveles estáticos
+
+  const activeCapital  = a.alloc * (1 - a.reserve);
+  const reserveCapital = a.alloc * a.reserve;
+
+  // Comisión sobre compra de activo (EUR → crypto)
+  const fee       = activeCapital * COMMISSION;
+  const netBuy    = activeCapital - fee;
+  // Comisión sobre compra de reserva (EUR → USDC)
+  const reserveFee = reserveCapital * COMMISSION;
+
+  a.qty        = netBuy / price;
+  a.activeVal  = a.qty * price;
+  a.reserveVal = reserveCapital - reserveFee;  // ← comisión aplicada
+  a.targetValue = a.activeVal;                 // CPV target locked
+
+  // Hold benchmark: compra la asignación COMPLETA (peso × 1000€), sin reservar nada
+  const holdFee = a.alloc * COMMISSION;
+  a.holdQty = (a.alloc - holdFee) / price;
+
+  S.t0Time = S.t0Time || new Date();
+  const now = new Date();
+
+  // Trade: compra activo crypto
+  S.trades.unshift({
+    id: `${key}_init_${Date.now()}`,
+    ts: now, asset:key, type:'INIT',
+    price, qty:a.qty, value:activeCapital, fee,
+    pnl: -fee,
+    note:`Compra inicial ${key} t₀`
+  });
+  // Trade: compra reserva USDC
+  S.trades.unshift({
+    id: `${key}_usdc_${Date.now()}`,
+    ts: now, asset:key, type:'INIT',
+    price:1, qty:a.reserveVal, value:reserveCapital, fee:reserveFee,
+    pnl: -reserveFee,
+    note:`Compra reserva USDC t₀`
+  });
+}
+
+// ================================================================
+//  INFINITY GRID BOT — Constant Position Value (CPV) + Niveles ESTÁTICOS
+// ================================================================
+// Los niveles buyLevel / sellLevel son PRECIOS FIJOS calculados desde pRef.
+// No se mueven aunque el precio fluctúe entre ellos.
+// Solo se actualizan cuando uno se dispara (nuevo pRef = precio exacto de la orden)
+// o cuando el usuario cambia parámetros manualmente.
+function runGrid(key, price) {
+  const a = S.assets[key];
+  if(!a.t0Price || !a.pRef) return;
+
+  // Niveles ESTÁTICOS — no dependen del precio actual
+  const sellTrig = a.sellLevel;   // pRef * (1 + profit)
+  const buyTrig  = a.buyLevel;    // pRef * (1 - profit)
+
+  // ── SELL: precio cruza nivel de venta ────────────────────────
+  if(price >= sellTrig) {
+    const executedPrice = sellTrig;          // precio exacto de la orden
+    const currentActive = a.qty * executedPrice;
+    const sellValue     = currentActive - a.targetValue;
+    if(sellValue < 0.5) {
+      // Actualiza pRef aunque no haya suficiente valor para vender
+      // (evita que quede bloqueado en el mismo nivel)
+      a.pRef      = executedPrice;
+      a.buyLevel  = executedPrice * (1 - a.profit);
+      a.sellLevel = executedPrice * (1 + a.profit);
+      return;
+    }
+
+    const fee       = sellValue * COMMISSION;
+    const netRec    = sellValue - fee;
+    const sellQty   = sellValue / executedPrice;
+    // Beneficio neto del ciclo: spread del grid − 2×comisiones
+    const netProfit = a.targetValue * a.profit - (a.targetValue * COMMISSION * 2);
+
+    a.qty        -= sellQty;
+    a.reserveVal += netRec;
+    a.activeVal   = a.qty * executedPrice;
+    a.gridProfit += Math.max(0, netProfit);
+    a.tradeCount++;
+
+    // ★ Nuevo pRef = precio exacto de la orden ejecutada
+    a.pRef      = executedPrice;
+    a.buyLevel  = executedPrice * (1 - a.profit);
+    a.sellLevel = executedPrice * (1 + a.profit);
+
+    S.trades.unshift({
+      id:`${key}_${Date.now()}`, ts:new Date(), asset:key, type:'SELL',
+      price:executedPrice, qty:sellQty, value:sellValue, fee,
+      pnl: netProfit,
+      note:`Grid venta | pRef→$${pf(executedPrice)} (+${(a.profit*100).toFixed(2)}%)`
+    });
+    syncToCloud();
+  }
+  // ── BUY: precio cruza nivel de compra ───────────────────────
+  else if(price <= buyTrig && a.reserveVal > 0.5) {
+    const executedPrice = buyTrig;           // precio exacto de la orden
+    const currentActive = a.qty * executedPrice;
+    const deficit  = a.targetValue - currentActive;
+    const maxBuy   = Math.min(deficit, a.reserveVal * 0.50);
+    if(maxBuy < 0.5) {
+      a.pRef      = executedPrice;
+      a.buyLevel  = executedPrice * (1 - a.profit);
+      a.sellLevel = executedPrice * (1 + a.profit);
+      return;
+    }
+
+    const fee    = maxBuy * COMMISSION;
+    const netBuy = maxBuy - fee;
+    const buyQty = netBuy / executedPrice;
+
+    a.qty        += buyQty;
+    a.reserveVal -= maxBuy;
+    a.activeVal   = a.qty * executedPrice;
+    a.tradeCount++;
+
+    // ★ Nuevo pRef = precio exacto de la orden ejecutada
+    a.pRef      = executedPrice;
+    a.buyLevel  = executedPrice * (1 - a.profit);
+    a.sellLevel = executedPrice * (1 + a.profit);
+
+    S.trades.unshift({
+      id:`${key}_${Date.now()}`, ts:new Date(), asset:key, type:'BUY',
+      price:executedPrice, qty:buyQty, value:maxBuy, fee,
+      pnl: -fee,
+      note:`Grid compra | pRef→$${pf(executedPrice)} (-${(a.profit*100).toFixed(2)}%)`
+    });
+    syncToCloud();
+  }
+  // ── Si el precio está ENTRE los dos niveles: no hacer nada ──
+  // (buyTrig < price < sellTrig) → niveles se mantienen fijos
+}
+
+// ================================================================
+//  PORTFOLIO AGGREGATION
+// ================================================================
+function calcPortfolio() {
+  let botTotal=0, holdTotal=0, gridProfit=0, trades=0;
+  Object.values(S.assets).forEach(a => {
+    const p = S.prices[a.key] || a.t0Price || 0;
+    botTotal   += a.qty * p + a.reserveVal;
+    holdTotal  += a.holdQty * p;
+    gridProfit += a.gridProfit;
+    trades     += a.tradeCount;
+  });
+  return { botTotal, holdTotal, gridProfit, trades };
+}
+
+function calcHoldInitialValue() {
+  // Ambos PnL% se miden contra INIT_CAP para que Alpha = (bot - hold) / base
+  // y sea positivo siempre que botTotal > holdTotal en valor absoluto.
+  return INIT_CAP;
+}
+
+function calcStress() {
+  const drops = [-0.10, -0.20, -0.30, -0.50];
+  const { botTotal, holdTotal } = calcPortfolio();
+  return drops.map(d => {
+    let botLoss=0, holdLoss=0;
+    Object.values(S.assets).forEach(a => {
+      const p = S.prices[a.key] || a.t0Price || 0;
+      if(!p) return;
+      const sp = p*(1+d);
+      // Bot: only active portion at risk (reserve stable)
+      botLoss  += (a.qty*sp - a.qty*p);
+      // Hold: full crypto exposure
+      holdLoss += (a.holdQty*sp - a.holdQty*p);
+    });
+    return {
+      label:`${(d*100).toFixed(0)}%`,
+      botLoss, botPct: botTotal? botLoss/botTotal : 0,
+      holdLoss, holdPct: holdTotal? holdLoss/holdTotal : 0,
+      adv: botLoss - holdLoss   // positive → bot better
+    };
+  });
+}
+
+// Devuelve los niveles ESTÁTICOS actuales (1 compra + 1 venta activos)
+// y las 4 órdenes pendientes por debajo del nivel de compra actual.
+// Incluye distancia% al precio de mercado actual.
+function getPredOrders(key) {
+  const a = S.assets[key];
+  const p = S.prices[key] || 0;
+  if(!p || !a.pRef) return {buys:[], sells:[], distBuy:null, distSell:null};
+
+  const buys = [], sells = [];
+
+  // ── Nivel de compra activo (estático) ────────────────────────
+  const activeBuy = a.buyLevel;
+  const distBuyPct = (activeBuy - p) / p * 100;   // negativo = precio está por encima
+  const bv0   = Math.min(a.targetValue * a.profit, a.reserveVal * 0.50);
+  const bfee0 = bv0 * COMMISSION;
+  buys.push({
+    price: activeBuy,
+    qty:   (bv0 - bfee0) / activeBuy,
+    value: bv0,
+    fee:   bfee0,
+    profit: bv0 * a.profit - bfee0 * 2,
+    distPct: distBuyPct,
+    active: true
+  });
+
+  // Siguientes 4 niveles de compra (grid geométrico descendente)
+  let pDown = activeBuy;
+  for(let i = 1; i <= 4; i++){
+    pDown = pDown * (1 - a.profit);
+    const bv   = bv0 * Math.pow(0.9, i);
+    const bfee = bv * COMMISSION;
+    buys.push({
+      price:   pDown,
+      qty:     (bv - bfee) / pDown,
+      value:   bv,
+      fee:     bfee,
+      profit:  bv * a.profit - bfee * 2,
+      distPct: (pDown - p) / p * 100,
+      active:  false
+    });
+  }
+
+  // ── Nivel de venta activo (estático) ─────────────────────────
+  const activeSell = a.sellLevel;
+  const distSellPct = (activeSell - p) / p * 100;  // positivo = precio está por debajo
+  const sv   = a.qty * a.pRef * a.profit;
+  const sfee = sv * COMMISSION;
+  sells.push({
+    price:   activeSell,
+    qty:     sv / activeSell,
+    value:   sv,
+    fee:     sfee,
+    profit:  sv * a.profit - sfee * 2,
+    distPct: distSellPct,
+    active:  true
+  });
+
+  return { buys, sells, distBuyPct, distSellPct };
+}
+
+// ================================================================
+//  EQUITY CHART — helpers
+// ================================================================
+function eqLabel(ts, period) {
+  const d = new Date(ts);
+  if(EQ_PERIODS[period] > 86400000)
+    return d.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit'})+' '+
+           d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function filterEq(times, bot, hold, period, btc) {
+  if(!times.length) return {labels:[],bot:[],hold:[],btc:[]};
+  // Ignorar los primeros 10 s desde t0 (compras iniciales distorsionan escala)
+  // S.t0Time es objeto Date → convertir a ms numérico con unario +
+  const t0ms    = S.t0Time ? +S.t0Time : 0;
+  const t0guard = t0ms + 10000;
+  const cutoff  = Date.now() - EQ_PERIODS[period];
+  const from    = Math.max(cutoff, t0guard);
+  let i = times.findIndex(t => t >= from);
+  if(i < 0) i = times.length;
+  return {
+    labels: times.slice(i).map(t=>eqLabel(t,period)),
+    bot:    bot.slice(i),
+    hold:   hold.slice(i),
+    btc:    (btc||[]).slice(i),
+  };
+}
+
+function applyEqPeriod(ch, times, bot, hold, period, btc) {
+  if(!ch) return;
+  const f = filterEq(times, bot, hold, period, btc);
+  ch.data.labels          = f.labels;
+  ch.data.datasets[0].data = f.bot;
+  ch.data.datasets[1].data = f.hold;
+  if(ch.data.datasets[2]) ch.data.datasets[2].data = f.btc;
+
+  // ── Auto-escala Y: padding estrictamente proporcional al rango real ─
+  const allVals = [...f.bot, ...f.hold, ...f.btc].filter(v => v > 0);
+  if(allVals.length > 1) {
+    const mn    = Math.min(...allVals);
+    const mx    = Math.max(...allVals);
+    const range = mx - mn;
+    // Padding = 20% del rango real. Si rango < 0.01€ (línea plana), usar 0.05% del precio.
+    const pad   = range > 0.01 ? range * 0.20 : mx * 0.0005;
+    ch.options.scales.y.min = Math.max(0, mn - pad);
+    ch.options.scales.y.max = mx + pad;
+  } else {
+    // Sin datos todavía: fijar escala alrededor del capital inicial para evitar eje 0–1
+    ch.options.scales.y.min = INIT_CAP * 0.995;
+    ch.options.scales.y.max = INIT_CAP * 1.005;
+  }
+
+  // Overlay "iniciando" mientras el gráfico espera los primeros puntos reales
+  const canvasParent = ch.canvas ? ch.canvas.parentElement : null;
+  if(canvasParent) {
+    let overlay = canvasParent.querySelector('.eq-overlay');
+    if(f.bot.length < 2) {
+      if(!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'eq-overlay absolute inset-0 flex items-center justify-center pointer-events-none';
+        overlay.innerHTML = '<span class="text-xs text-gray-600 tracking-widest">Iniciando — esperando datos...</span>';
+        canvasParent.style.position = 'relative';
+        canvasParent.appendChild(overlay);
+      }
+    } else if(overlay) {
+      overlay.remove();
+    }
+  }
+
+  ch.update('none');
+}
+
+function setGlobalEqPeriod(p) {
+  S.eqPeriod = p;
+  Object.keys(EQ_PERIODS).forEach(k => {
+    const b = $id(`eq-btn-${k}`);
+    if(b) b.className = k===p
+      ? 'px-1.5 py-0.5 text-xs rounded font-semibold text-cyan-400 bg-cyan-900/30'
+      : 'px-1.5 py-0.5 text-xs rounded text-gray-600 hover:text-gray-400 transition';
+  });
+  applyEqPeriod(S.eqChart, S.eqTimes, S.eqBot, S.eqHold, p, S.eqBtc);
+}
+
+function setAssetEqPeriod(key, p) {
+  const a = S.assets[key]; if(!a) return;
+  a.eqPeriod = p;
+  Object.keys(EQ_PERIODS).forEach(k => {
+    const b = $id(`${key}-eq-btn-${k}`);
+    if(b) b.className = k===p
+      ? 'px-1.5 py-0.5 text-xs rounded font-semibold text-cyan-400 bg-cyan-900/30'
+      : 'px-1.5 py-0.5 text-xs rounded text-gray-600 hover:text-gray-400 transition';
+  });
+  applyEqPeriod(a.eqChart, a.eqTimes, a.eqBot, a.eqHold, p);
+}
+
+// ================================================================
+//  EQUITY CHART — init + interval
+// ================================================================
+function initChart() {
+  const ctx = $id('eq-chart').getContext('2d');
+  S.eqChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels:[], datasets:[
+      { label:'e3Argos',   data:[], borderColor:'#C9A96E', backgroundColor:'rgba(201,169,110,0.07)',
+        borderWidth:1.5, pointRadius:0, tension:0.35, fill:true },
+      { label:'Hold',      data:[], borderColor:'#475569', backgroundColor:'rgba(71,85,105,0.04)',
+        borderWidth:1.5, pointRadius:0, tension:0.35, fill:false },
+      { label:'BTC 100%',  data:[], borderColor:'#f7931a', backgroundColor:'rgba(247,147,26,0.04)',
+        borderWidth:1.2, pointRadius:0, tension:0.35, fill:false, borderDash:[4,3] }
+    ]},
+    options:{
+      responsive:true, animation:false, interaction:{mode:'index',intersect:false},
+      scales:{
+        x:{ ticks:{color:'#524E4A',maxTicksLimit:8,font:{size:10}}, grid:{color:'#1A1A1A'} },
+        y:{ ticks:{color:'#524E4A',font:{size:10},callback:v=>'€'+f2(v)}, grid:{color:'#1A1A1A'},
+            min:undefined, max:undefined }
+      },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
+        label: c=>`${c.dataset.label}: €${f2(c.parsed.y)}`
+      }}}
+    }
+  });
+
+  S.eqTimer = setInterval(()=>{
+    const {botTotal,holdTotal} = calcPortfolio();
+    if(!botTotal) return;
+    const now = Date.now();
+    const maxAge = EQ_PERIODS['12m'];
+
+    // ── BTC 100%-Hold: calcula qty en t0 y valor actual ─────────
+    const btcAsset = S.assets['BTC'];
+    const btcPrice = S.prices['BTC'] || 0;
+    if(btcAsset && btcPrice && btcAsset.t0Price && !S.btcHoldQty) {
+      // Cantidad de BTC si se hubiese invertido todo INIT_CAP al precio t0
+      S.btcHoldQty = (INIT_CAP * (1 - COMMISSION)) / btcAsset.t0Price;
+    }
+    const btcHoldVal = (S.btcHoldQty && btcPrice) ? S.btcHoldQty * btcPrice : 0;
+
+    // ── Global: store + trim + display ──────────────────────────
+    S.eqTimes.push(now); S.eqBot.push(botTotal); S.eqHold.push(holdTotal);
+    if(btcHoldVal) S.eqBtc.push(btcHoldVal);
+    else if(S.eqBtc.length) S.eqBtc.push(S.eqBtc[S.eqBtc.length-1]); // mantener último conocido
+    while(S.eqTimes.length > MAX_EQ_STORED)  {
+      S.eqTimes.shift(); S.eqBot.shift(); S.eqHold.shift();
+      if(S.eqBtc.length > MAX_EQ_STORED) S.eqBtc.shift();
+    }
+    while(S.eqTimes.length>1 && now-S.eqTimes[0]>maxAge) {
+      S.eqTimes.shift(); S.eqBot.shift(); S.eqHold.shift();
+      if(S.eqBtc.length > S.eqTimes.length) S.eqBtc.shift();
+    }
+    applyEqPeriod(S.eqChart, S.eqTimes, S.eqBot, S.eqHold, S.eqPeriod, S.eqBtc);
+
+    // ── Per-asset: store + trim + display ───────────────────────
+    Object.values(S.assets).forEach(a => {
+      if(!a.eqChart) return;
+      const p = S.prices[a.key] || a.t0Price || 0;
+      if(!p) return;
+      const bv = a.qty*p + a.reserveVal, hv = a.holdQty*p;
+      a.eqTimes.push(now); a.eqBot.push(bv); a.eqHold.push(hv);
+      while(a.eqTimes.length > MAX_EQ_STORED)  { a.eqTimes.shift(); a.eqBot.shift(); a.eqHold.shift(); }
+      while(a.eqTimes.length>1 && now-a.eqTimes[0]>maxAge) { a.eqTimes.shift(); a.eqBot.shift(); a.eqHold.shift(); }
+      applyEqPeriod(a.eqChart, a.eqTimes, a.eqBot, a.eqHold, a.eqPeriod);
+    });
+  }, EQ_INTERVAL);
+}
+
+// ================================================================
+//  DISTRIBUTION DONUT CHART
+// ================================================================
+// Plugin: texto central con total €
+const etriaRingCenter = {
+  id: 'etriaRingCenter',
+  beforeDraw(chart) {
+    const { ctx, chartArea } = chart;
+    if(!chartArea) return;
+    const cx = chartArea.left + chartArea.width  / 2;
+    const cy = chartArea.top  + chartArea.height / 2;
+    const total = chart.data.datasets[0].data.reduce((a,b) => a + (b||0), 0);
+    ctx.save();
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font      = "400 8px 'Lato', sans-serif";
+    ctx.fillStyle = '#3A3530';
+    ctx.fillText('total', cx, cy - 11);
+    ctx.font      = "700 14px 'Courier New', monospace";
+    ctx.fillStyle = '#F5F0E8';
+    ctx.fillText('\u20ac' + f2(total), cx, cy + 4);
+    ctx.restore();
+  }
+};
+
+const DIST_USDC_COL = '#52525b';
+
+function initDistChart() {
+  const canvas = $id('dist-chart');
+  if(!canvas || S.distChart) return;
+
+  const keys = Object.keys(CFG);
+  const cols = Object.values(CFG).map(c => c.col);
+
+  const bgColors  = [...cols.map(c => hexAlpha(c, 0.82)), hexAlpha(DIST_USDC_COL, 0.70)];
+  const brdColors = bgColors.map(() => '#131313');
+
+  S.distChart = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    plugins: [etriaRingCenter],
+    data: {
+      labels: [...keys, 'USDC'],
+      datasets: [{
+        data:             new Array(keys.length + 1).fill(0),
+        backgroundColor:  bgColors,
+        borderColor:      brdColors,
+        borderWidth:      2,
+        hoverBorderColor: '#C9A96E',
+        hoverBorderWidth: 2,
+        hoverOffset:      6,
+      }]
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           false,
+      cutout:              '76%',
+      layout: { padding: 0 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(13,13,13,0.95)',
+          borderColor:     'rgba(201,169,110,0.25)',
+          borderWidth:     1,
+          padding:         9,
+          displayColors:   false,
+          titleFont:  { size: 10, family: "'Lato', sans-serif", weight: '700' },
+          bodyFont:   { size: 11, family: "'Courier New', monospace" },
+          titleColor: '#8A857E',
+          bodyColor:  '#F5F0E8',
+          callbacks: {
+            title: ctx => ctx[0].label,
+            label: ctx => {
+              const val   = ctx.parsed;
+              const total = ctx.dataset.data.reduce((a,b) => a+(b||0), 0);
+              const pct   = total > 0 ? (val/total*100).toFixed(1) : '0.0';
+              return '\u20ac' + f2(val) + '  \u00b7  ' + pct + '%';
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderDistChart() {
+  if(!S.distChart) return;
+  const keys = Object.keys(CFG);
+  let usdcTotal = 0;
+
+  const cryptoVals = keys.map(k => {
+    const a = S.assets[k];
+    const p = S.prices[k] || a.t0Price || 0;
+    usdcTotal += a.reserveVal;
+    return a.qty * p;
+  });
+
+  const allVals   = [...cryptoVals, usdcTotal];
+  const total     = allVals.reduce((a,b) => a+b, 0);
+  const allLabels = [...keys, 'USDC'];
+  const allCols   = [...Object.values(CFG).map(c => c.col), DIST_USDC_COL];
+
+  S.distChart.data.datasets[0].data = allVals;
+  S.distChart.data.labels           = allLabels;
+  S.distChart.update('none');
+
+  const leg = $id('dist-legend');
+  if(!leg) return;
+  leg.innerHTML = allLabels.map((lbl, i) => {
+    const val = allVals[i] || 0;
+    const pct = total > 0 ? (val/total*100).toFixed(0) : '0';
+    const eur = f2(val);
+    const col = allCols[i];
+    return '<div style="display:flex;align-items:center;justify-content:flex-end;gap:5px;padding:3px 0;">'
+      + '<span style="font-family:ui-monospace,\'Consolas\',monospace;font-size:10px;color:#C9A96E">' + pct + '%</span>'
+      + '<span style="font-family:\'Lato\',sans-serif;font-size:10px;font-weight:700;color:#8A857E;letter-spacing:0.04em">' + lbl + '</span>'
+      + '<span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:' + col + ';opacity:0.85"></span>'
+      + '</div>';
+  }).join('');
+}
+
+// ================================================================
+//  UI RENDERING
+// ================================================================
+function renderUI() {
+  const { botTotal, holdTotal, gridProfit, trades } = calcPortfolio();
+  const holdRef = calcHoldInitialValue();
+
+  const floatPnL = botTotal - INIT_CAP;
+  const floatPct = floatPnL / INIT_CAP;
+  const holdPnL  = holdTotal - holdRef;
+  const holdPct  = holdPnL / holdRef;
+  const botPct   = floatPnL / INIT_CAP;
+  const alpha    = botPct - holdPct;
+  const btcPrice0 = S.prices['BTC'] || 0;
+  const btcHoldVal0 = (S.btcHoldQty && btcPrice0) ? S.btcHoldQty * btcPrice0 : 0;
+  const btcPct0  = btcHoldVal0 > 0 ? (btcHoldVal0 - INIT_CAP) / INIT_CAP : null;
+  const alphaBtc = btcPct0 !== null ? botPct - btcPct0 : null;
+
+  // ── KPIs ────────────────────────────────────────────────────
+  const t0Str = fmtDate(S.t0Time);
+
+  $id('kpi-total').textContent   = `€${f2(botTotal)}`;
+  $id('kpi-total').className     = `text-2xl font-bold mono ${col(floatPnL)}`;
+  $id('kpi-total-p').textContent = pct(floatPct);
+  $id('kpi-total-p').className   = `text-2xl font-bold mono ${col(floatPnL)}`;
+  setHTML('kpi-total-date', `<span>desde</span><span>${t0Str}</span>`); // justify-end in HTML
+
+  $id('kpi-gp').textContent     = `€${f2(gridProfit)}`;
+  const gridTrades = S.trades.filter(t => t.type === 'BUY' || t.type === 'SELL').length;
+  $id('kpi-trades').textContent = `${gridTrades} trades`;
+  const totalFees = S.trades.reduce((s, t) => s + (t.fee || 0), 0);
+  const feesEl = $id('kpi-fees');
+  if(feesEl) feesEl.textContent = `€${f2(totalFees)}`;
+
+  $id('kpi-float').textContent   = euro(floatPnL);
+  $id('kpi-float').className     = `text-2xl font-bold mono ${col(floatPnL)}`;
+  $id('kpi-float-p').textContent = pct(floatPct);
+  $id('kpi-float-p').className   = `text-2xl font-bold mono ${col(floatPnL)}`;
+  setHTML('kpi-float-date', `<span>desde</span><span>${t0Str}</span>`);
+
+  $id('kpi-alpha').textContent = `${pct(alpha)}`;
+  $id('kpi-alpha').className   = `text-2xl font-bold mono ${alpha>=0?'text-cyan-400':'text-orange-400'}`;
+  $id('kpi-hold-p').textContent= `Hold: ${pct(holdPct)}`;
+  const alphaBtcEl = $id('kpi-alpha-btc');
+  const btcPEl     = $id('kpi-btc-p');
+  if(alphaBtcEl) {
+    if(alphaBtc !== null) {
+      alphaBtcEl.textContent = pct(alphaBtc);
+      alphaBtcEl.className   = `text-2xl font-bold mono text-right ${alphaBtc>=0?'text-orange-400':'text-red-400'}`;
+    } else {
+      alphaBtcEl.textContent = '—';
+      alphaBtcEl.className   = 'text-2xl font-bold mono text-right text-gray-600';
+    }
+  }
+  if(btcPEl) btcPEl.textContent = btcPct0 !== null ? `BTC: ${pct(btcPct0)}` : 'BTC: —';
+
+  // ── Equity chart inline PnL labels ──────────────────────────
+  const bEl = $id('eq-pnl-bot'),  hEl = $id('eq-pnl-hold');
+  if(bEl){ bEl.textContent = pct(botPct);  bEl.className = `mono font-semibold ${col(botPct)}`; }
+  if(hEl){ hEl.textContent = pct(holdPct); hEl.className = `mono font-semibold ${col(holdPct)}`; }
+
+  renderSummaryTable();
+  renderStressTable();
+  renderDistChart();
+  renderLevelsTable();
+  renderLedger();
+  renderAssetViews();
+  updateCapEur();       // keep € values in Configuración Cartera fresh
+}
+
+// ── Summary table ────────────────────────────────────────────
+function renderSummaryTable() {
+  let html = '';
+  // acumuladores para la fila de totales
+  let sumAv = 0, sumRes = 0, sumGp = 0, sumFloat = 0;
+
+  Object.values(S.assets).forEach(a => {
+    const p     = S.prices[a.key] || 0;
+    const prev  = S.prevPrices[a.key] || p;
+    const dir   = p>prev?'up':p<prev?'down':'neu';
+    const av    = a.qty * p;
+    const tot   = av + a.reserveVal;
+    const float = tot - a.alloc;
+
+    sumAv    += av;
+    sumRes   += a.reserveVal;
+    sumGp    += a.gridProfit;
+    sumFloat += float;
+
+    html += `
+    <tr class="border-b border-gray-800/40 hover:bg-gray-800/20 transition cursor-pointer" onclick="switchTab('${a.key}')">
+      <td class="py-1.5 pr-2 font-semibold" style="color:${a.col}">${a.key}
+        <span class="text-gray-700 text-[10px] font-normal ml-1">${(a.weight*100).toFixed(0)}%</span>
+      </td>
+      <td class="text-right pr-2 mono price-${dir} font-medium" id="sum-p-${a.key}">$${pf(p)}</td>
+      <td class="text-right pr-2 text-gray-500">${(a.weight*100).toFixed(0)}%</td>
+      <td class="text-right pr-2 mono">€${f2(av)}</td>
+      <td class="text-right pr-2 mono text-yellow-500/80">€${f2(a.reserveVal)}</td>
+      <td class="text-right pr-2 mono text-emerald-400">€${f2(a.gridProfit)}</td>
+      <td class="text-right pr-2 mono ${col(float)}">${euro(float)}</td>
+      <td class="text-right text-gray-500">${a.tradeCount}</td>
+    </tr>`;
+  });
+
+  // ── Fila de TOTALES ──────────────────────────────────────────
+  const sumTotal = sumAv + sumRes + sumGp;  // V.ACTIVO + RESERVA + GRID
+  html += `
+  <tr class="border-t-2 border-gray-600 bg-gray-800/30 font-semibold text-xs">
+    <td class="py-2 pr-2 text-gray-400 tracking-wider">TOTAL</td>
+    <td class="text-right pr-2 text-gray-600">—</td>
+    <td class="text-right pr-2 text-cyan-400 mono">€${f2(sumTotal)}</td>
+    <td class="text-right pr-2 mono text-white">€${f2(sumAv)}</td>
+    <td class="text-right pr-2 mono text-yellow-400">€${f2(sumRes)}</td>
+    <td class="text-right pr-2 mono text-emerald-400">€${f2(sumGp)}</td>
+    <td class="text-right pr-2 mono ${col(sumFloat)}">${euro(sumFloat)}</td>
+    <td class="text-right text-gray-600">—</td>
+  </tr>`;
+
+  setHTML('tbl-summary', html);
+}
+
+// ── Stress table ─────────────────────────────────────────────
+function renderStressTable() {
+  const rows = calcStress();
+  let html = '';
+  rows.forEach(r=>{
+    html += `
+    <tr class="border-b border-gray-800/40">
+      <td class="py-1.5 text-red-400 font-bold">${r.label}</td>
+      <td class="text-right mono text-emerald-400">-€${f2(Math.abs(r.botLoss))}</td>
+      <td class="text-right mono text-emerald-400">${f2(r.botPct*100)}%</td>
+      <td class="text-right mono text-red-400">-€${f2(Math.abs(r.holdLoss))}</td>
+      <td class="text-right mono font-semibold ${r.adv>=0?'text-emerald-400':'text-red-400'}">${r.adv>=0?'✓ +':'✗ -'}€${f2(Math.abs(r.adv))}</td>
+    </tr>`;
+  });
+  setHTML('tbl-stress', html);
+}
+
+// ── Grid levels table ─────────────────────────────────────────
+function renderLevelsTable() {
+  let html = '';
+  Object.values(S.assets).forEach(a=>{
+    const p = S.prices[a.key]||0;
+    if(!p || !a.pRef) return;
+
+    const dBuy  = (a.buyLevel  - p) / p * 100;   // neg: price above buy level
+    const dSell = (a.sellLevel - p) / p * 100;   // pos: price below sell level
+    const spread = a.profit * 100;
+
+    // Barra desde el centro (pRef) hacia el trigger más cercano
+    // offset>0 → precio subiendo hacia SELL | offset<0 → bajando hacia COMPRA
+    const halfRange     = a.pRef * a.profit;          // distancia pRef→trigger
+    const offset        = p - a.pRef;                 // signed
+    const pct           = Math.min(1, Math.abs(offset) / halfRange); // 0=pRef, 1=trigger
+    const barPct        = pct * 50;                   // % de la mitad del contenedor (0-50)
+    const towardSell    = offset >= 0;
+    const barLeft       = towardSell ? 50 : 50 - barPct;
+    const barWidth      = barPct;
+    const barColor      = towardSell ? 'rgba(249,115,22,0.65)' : 'rgba(16,185,129,0.65)';
+    const buyTriggered  = p <= a.buyLevel;
+    const sellTriggered = p >= a.sellLevel;
+
+    html += `
+    <tr class="border-b border-gray-800/40 hover:bg-gray-800/20 cursor-pointer" onclick="switchTab('${a.key}')">
+
+      <!-- Col 1: Activo + pRef -->
+      <td class="py-2 font-semibold" style="color:${a.col}">
+        ${a.key}
+        <div class="text-gray-500 text-[10px] font-normal mt-0.5">$${pf(a.pRef)}</div>
+      </td>
+
+      <!-- Col 2: Nivel compra + dist% -->
+      <td class="text-right pr-2 py-2">
+        <div class="ob-buy mono font-semibold text-xs ${buyTriggered?'text-emerald-300':''}">$${pf(a.buyLevel)}</div>
+        <div class="text-[10px] ${Math.abs(dBuy)<1?'text-emerald-400':'text-gray-500'}">${dBuy.toFixed(2)}%</div>
+      </td>
+
+      <!-- Col 3: Barra visual proximidad — nace en centro, crece hacia el trigger activo -->
+      <td class="px-2 py-2">
+        <div class="relative h-2.5 rounded bg-gray-800 overflow-hidden">
+          <!-- Barra dinámica: izquierda=compra, derecha=venta, origen=centro -->
+          <div class="absolute top-0 h-full transition-all"
+            style="left:${barLeft.toFixed(1)}%; width:${barWidth.toFixed(1)}%; background:${barColor}"></div>
+          <!-- Línea central = pRef -->
+          <div class="absolute top-0 h-full w-px bg-gray-400/60" style="left:50%"></div>
+        </div>
+        <div class="flex justify-between text-[9px] mt-0.5">
+          <span class="${buyTriggered?'text-emerald-300':'text-gray-600'}">${Math.abs(dBuy).toFixed(2)}%</span>
+          <span class="${sellTriggered?'text-orange-300':'text-gray-600'}">${dSell.toFixed(2)}%</span>
+        </div>
+      </td>
+
+      <!-- Col 4: Nivel venta + dist% -->
+      <td class="text-left pl-2 py-2">
+        <div class="ob-sell mono font-semibold text-xs ${sellTriggered?'text-orange-300':''}">$${pf(a.sellLevel)}</div>
+        <div class="text-[10px] ${dSell<1?'text-orange-400':'text-gray-500'}">+${dSell.toFixed(2)}%</div>
+      </td>
+
+      <!-- Col 5: Spread -->
+      <td class="text-right py-2 text-gray-500 text-[10px]">±${spread.toFixed(1)}%</td>
+    </tr>`;
+  });
+  setHTML('tbl-levels', html);
+}
+
+// ── Trade ledger ──────────────────────────────────────────────
+function renderLedger() {
+  $id('ledger-cnt').textContent = `${S.trades.length} ops`;
+
+  if(!S.trades.length){
+    setHTML('ledger','<div class="text-gray-700 text-center py-6">Sin operaciones todavía…</div>');
+    setHTML('ledger-stats','');
+    setHTML('ledger-gp-hdr','');
+    return;
+  }
+
+  // ── Quick stats ──────────────────────────────────────────────
+  let totalFees=0, nBuy=0, nSell=0, nReb=0, nInit=0, netPnl=0;
+  S.trades.forEach(t=>{
+    totalFees += t.fee||0;
+    netPnl    += t.pnl||0;
+    if(t.type==='BUY')   nBuy++;
+    else if(t.type==='SELL')  nSell++;
+    else if(t.type==='INIT')  nInit++;
+    else nReb++;
+  });
+  const { gridProfit } = calcPortfolio();
+  setHTML('ledger-gp-hdr', `Grid: €${f2(gridProfit)}`);
+  setHTML('ledger-stats', `
+    <span style="background:#1e2a3a;color:#475569;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:0.05em">${nInit} INIT</span>
+    <span style="background:#0a2016;color:#6eb98a;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:0.05em">${nBuy} BUY</span>
+    <span style="background:#2a0e0e;color:#c87070;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:0.05em">${nSell} SELL</span>
+    <span style="background:#1c1408;color:#a07830;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:0.05em">${nReb} REB</span>
+    <span class="ml-auto" style="color:#7f4444;font-size:10px">fees: -€${f2(totalFees)}</span>
+  `);
+
+  const typeMap = {
+    INIT:'INICIAL', BUY:'COMPRA', SELL:'VENTA',
+    BUYREB:'REBAL+', SELLREB:'REBAL-'
+  };
+  const _badge = (clr) => `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;border:1px solid ${clr};background:transparent;vertical-align:middle;flex-shrink:0"></span>`;
+  const dotMap  = {
+    INIT:    _badge('#475569'),
+    BUY:     _badge('#6eb98a'),
+    SELL:    _badge('#c87070'),
+    BUYREB:  _badge('#a07830'),
+    SELLREB: _badge('#a07830'),
+  };
+  const clsMap  = { INIT:'l-init', BUY:'l-buy', SELL:'l-sell', BUYREB:'l-reb', SELLREB:'l-reb' };
+
+  // Single-line ledger: one row per operation, all fields visible
+  let html = '';
+  S.trades.slice(0,100).forEach(t=>{
+    const a   = S.assets[t.asset];
+    const cls = clsMap[t.type]||'l-buy';
+    const dot = dotMap[t.type]||'●';
+    const lbl = typeMap[t.type]||t.type;
+    const priceStr = t.price===1 ? '$1 USDC' : `$${pf(t.price)}`;
+    html += `
+    <div class="pl-1.5 py-0.5 rounded ${cls} grid items-center hover:bg-gray-800/30 transition"
+      style="grid-template-columns:18px 36px 52px 1fr 1fr 56px 52px 34px; gap:0 6px; min-height:22px">
+      <span class="flex items-center justify-center">${dot}</span>
+      <span class="font-bold text-[11px]" style="color:${a?.col||'#94a3b8'}">${t.asset}</span>
+      <span class="text-gray-400">${lbl}</span>
+      <span class="mono text-gray-300 text-right">${priceStr}</span>
+      <span class="mono text-gray-400 text-right">${t.qty>=1?t.qty.toFixed(3):t.qty.toFixed(5)}</span>
+      <span class="mono text-red-500/70 text-right">-€${t.fee.toFixed(3)}</span>
+      <span class="mono font-semibold text-right ${col(t.pnl)}">${euro(t.pnl)}</span>
+      <span class="text-gray-600 text-right">${t.ts.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span>
+    </div>`;
+  });
+  setHTML('ledger', html);
+}
+
+// ================================================================
+//  CONFIGURACIÓN CARTERA — build rows + validation
+// ================================================================
+function buildCfgRows() {
+  const container = $id('cfg-rows');
+  if(!container) return;
+
+  const ICONS = { BTC:'₿', ETH:'◆', SOL:'◎', XRP:'✕', ONDO:'○' };
+
+  let html = '';
+  Object.values(S.assets).forEach(a => {
+    const k = a.key;
+    html += `
+    <div class="cfg-row" id="cfg-row-${k}">
+
+      <!-- Asset name -->
+      <div class="cfg-asset-name">
+        <span style="color:${a.col};font-size:1rem">${ICONS[k]||'●'}</span>
+        <span style="color:${a.col}">${k}</span>
+      </div>
+
+      <!-- Cap% — numeric editable input -->
+      <div class="cfg-section cap" style="align-items:flex-start">
+        <div class="flex items-center gap-2">
+          <input type="number" id="cfg-cap-${k}"
+            class="cap-input" min="1" max="99" step="1"
+            value="${(a.weight*100).toFixed(0)}"
+            oninput="onCapInput('${k}',this.value)"
+            onblur="onCapBlur('${k}',this.value)">
+          <span class="text-gray-600 text-xs">%</span>
+          <span id="cfg-cap-eur-${k}" class="text-gray-600 text-xs mono">€${f2(a.alloc)}</span>
+        </div>
+      </div>
+
+      <!-- Res% — slider -->
+      <div class="cfg-section">
+        <div class="flex items-center gap-2 mb-0.5">
+          <span class="cfg-col-label">% Reserva</span>
+          <span id="cfg-res-v-${k}" class="cfg-val-label">${(a.reserve*100).toFixed(0)}%</span>
+          <span id="cfg-res-rec-${k}" class="text-gray-700 text-xs"></span>
+        </div>
+        <div class="sl-wrap" style="max-width:260px">
+          <input type="range" min="10" max="80" step="1"
+            value="${(a.reserve*100).toFixed(0)}"
+            id="cfg-sl-res-${k}"
+            oninput="onCfgSlider('${k}','res',this.value)">
+          <div class="sl-notch" id="cfg-notch-res-${k}"></div>
+        </div>
+      </div>
+
+      <!-- Prof% — slider -->
+      <div class="cfg-section">
+        <div class="flex items-center gap-2 mb-0.5">
+          <span class="cfg-col-label">Prof%</span>
+          <span id="cfg-pft-v-${k}" class="cfg-val-label">${(a.profit*100).toFixed(2)}%</span>
+          <span id="cfg-pft-rec-${k}" class="text-gray-700 text-xs"></span>
+        </div>
+        <div class="sl-wrap" style="max-width:260px">
+          <input type="range" min="0.10" max="5.00" step="0.05"
+            value="${(a.profit*100).toFixed(2)}"
+            id="cfg-sl-pft-${k}"
+            oninput="onCfgSlider('${k}','pft',this.value)">
+          <div class="sl-notch" id="cfg-notch-pft-${k}"></div>
+        </div>
+      </div>
+
+    </div>`;
+  });
+  container.innerHTML = html;
+  validateWeights();
+}
+
+// Called on every keystroke of a Cap% input
+function onCapInput(k, raw) {
+  const v = parseFloat(raw);
+  const input = $id(`cfg-cap-${k}`);
+
+  // Visual error state while typing if out of range
+  if(!isFinite(v) || v <= 0 || v > 99) {
+    if(input) input.classList.add('w-error');
+  } else {
+    if(input) input.classList.remove('w-error');
+  }
+  validateWeights();
+}
+
+// Commit the value on blur (or Enter)
+function onCapBlur(k, raw) {
+  const v = parseFloat(raw);
+  if(!isFinite(v) || v <= 0 || v > 99) return;
+
+  const input = $id(`cfg-cap-${k}`);
+  if(input) { input.value = v.toFixed(0); input.classList.remove('w-error'); }
+
+  const prevWeight = S.assets[k].weight;
+  const newWeight  = v / 100;
+  if(Math.abs(newWeight - prevWeight) < 0.001) return;
+
+  // Only commit if total would still be ≤ 100 (we already show alert, but still apply)
+  S.assets[k].weight = newWeight;
+  execRebalance(k, prevWeight, newWeight, 'weight');
+
+  // Sync asset-tab slider too
+  const sl = $id(`${k}-sl-w`);
+  if(sl) { sl.value = v; setHTML(`${k}-sl-w-v`, `${v.toFixed(0)}%`); }
+
+  updateCapEur();
+  validateWeights();
+}
+
+// Slider in the cfg panel mirrors to asset tab sliders
+function onCfgSlider(k, param, raw) {
+  const v = parseFloat(raw);
+  if(param === 'res') {
+    setHTML(`cfg-res-v-${k}`, `${v.toFixed(0)}%`);
+    // Mirror to asset tab
+    const sl = $id(`${k}-sl-res`); if(sl) sl.value = v;
+    setHTML(`${k}-sl-res-v`, `${v.toFixed(0)}%`);
+    const prevRes = S.assets[k].reserve;
+    S.assets[k].reserve = v / 100;
+    execRebalance(k, prevRes, S.assets[k].reserve, 'reserve');
+  } else if(param === 'pft') {
+    setHTML(`cfg-pft-v-${k}`, `${v.toFixed(2)}%`);
+    const sl = $id(`${k}-sl-pft`); if(sl) sl.value = v;
+    setHTML(`${k}-sl-pft-v`, `${v.toFixed(2)}%`);
+    S.assets[k].profit = v / 100;
+    // ★ Cambio de profit% → recalcular niveles estáticos desde precio actual
+    if(S.prices[k]) setPRef(S.assets[k], S.prices[k]);
+  }
+  checkDeviation(k);
+}
+
+// Show € equivalent next to Cap% input
+function updateCapEur() {
+  const { botTotal } = calcPortfolio();
+  Object.values(S.assets).forEach(a => {
+    const eur = botTotal * a.weight;
+    setHTML(`cfg-cap-eur-${a.key}`, `€${f2(eur)}`);
+  });
+}
+
+// Validate that all weights sum to 100%
+function validateWeights() {
+  let total = 0;
+  Object.keys(CFG).forEach(k => {
+    const inp = $id(`cfg-cap-${k}`);
+    const v = inp ? parseFloat(inp.value) : (S.assets[k].weight * 100);
+    if(isFinite(v) && v > 0) total += v;
+  });
+
+  const totalEl = $id('cfg-total-pct');
+  const alertEl = $id('cfg-weight-alert');
+  const msgEl   = $id('cfg-weight-msg');
+
+  if(totalEl) {
+    totalEl.textContent = total.toFixed(0) + '%';
+    totalEl.className = `font-bold mono ${Math.abs(total-100)<0.5 ? 'text-emerald-400' : 'text-red-400'}`;
+  }
+
+  const ok = Math.abs(total - 100) < 0.5;
+  if(alertEl) {
+    alertEl.classList.toggle('hidden', ok);
+    alertEl.classList.toggle('flex', !ok);
+  }
+  if(msgEl && !ok) {
+    const diff = total - 100;
+    msgEl.textContent = `Los pesos suman ${total.toFixed(0)}% (${diff>0?'+':''}${diff.toFixed(0)}%)`;
+  }
+}
+
+// Sync cfg-panel sliders/notches from optimizer data
+// Llamado SOLO desde parseOptimizer() — muestra rec y notch sin tocar el valor actual
+function syncCfgFromOptimizer(k, rec) {
+  const a = S.assets[k];
+  if(rec.reserve !== undefined) {
+    // Notch gris en la posición recomendada (sin mover el slider actual)
+    setCfgNotch(k,'res', rec.reserve*100, 10, 80);
+    // Mostrar "rec:XX%": verde si desviación ≤10%, ámbar si >10%
+    const devRes = a.reserve > 0 ? Math.abs(rec.reserve - a.reserve) / a.reserve : 0;
+    const diff   = Math.abs(rec.reserve - a.reserve) > 0.001;
+    const colRes = devRes > 0.10 ? 'text-amber-500' : 'text-emerald-400';
+    setHTML(`cfg-res-rec-${k}`,
+      diff ? `<span class="${colRes}">rec:${(rec.reserve*100).toFixed(0)}%</span>` : '');
+  }
+  if(rec.profit !== undefined) {
+    setCfgNotch(k,'pft', rec.profit*100, 0.1, 5);
+    const devPft = a.profit > 0 ? Math.abs(rec.profit - a.profit) / a.profit : 0;
+    const diff   = Math.abs(rec.profit - a.profit) > 0.00001;
+    const colPft = devPft > 0.10 ? 'text-amber-500' : 'text-emerald-400';
+    setHTML(`cfg-pft-rec-${k}`,
+      diff ? `<span class="${colPft}">rec:${(rec.profit*100).toFixed(2)}%</span>` : '');
+  }
+  if(rec.weight !== undefined) {
+    const diff = Math.abs(rec.weight - a.weight) > 0.001;
+    const inp = $id(`cfg-cap-${k}`);
+    if(inp) inp.title = diff ? `Recomendado: ${(rec.weight*100).toFixed(0)}%` : '';
+    const { botTotal } = calcPortfolio();
+    const eurStr = `€${f2(botTotal * a.weight)}`;
+    setHTML(`cfg-cap-eur-${k}`,
+      diff
+        ? `${eurStr} <span class="text-amber-500">rec:${(rec.weight*100).toFixed(0)}%</span>`
+        : eurStr);
+  }
+}
+
+// Llamado SOLO desde syncOptimizer() — después de aplicar, limpia rec labels
+function clearCfgRecLabels(k) {
+  setHTML(`cfg-res-rec-${k}`, '');
+  setHTML(`cfg-pft-rec-${k}`, '');
+  const inp = $id(`cfg-cap-${k}`);
+  if(inp) inp.title = '';
+  // Ocultar notches
+  const nr = $id(`cfg-notch-res-${k}`); if(nr) nr.style.display='none';
+  const np = $id(`cfg-notch-pft-${k}`); if(np) np.style.display='none';
+}
+
+function setCfgNotch(k, param, valPct, min, max) {
+  const notch = $id(`cfg-notch-${param}-${k}`);
+  if(!notch) return;
+  const pct = Math.max(0, Math.min(100, (valPct - min)/(max - min)*100));
+  notch.style.left = pct + '%';
+  notch.style.display = 'block';
+}
+
+// ================================================================
+//  PER-ASSET EQUITY CHART
+// ================================================================
+function initAssetChart(key) {
+  const a = S.assets[key];
+  const canvas = $id(`${key}-eq-chart`);
+  if(!canvas || a.eqChart) return;
+
+  const ctx = canvas.getContext('2d');
+  a.eqChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label:'e3Argos', data:[], borderColor: a.col, backgroundColor: hexAlpha(a.col, 0.08),
+          borderWidth:1.5, pointRadius:0, tension:0.35, fill:true },
+        { label:'Hold', data:[], borderColor:'#475569', backgroundColor:'rgba(71,85,105,0.04)',
+          borderWidth:1.5, pointRadius:0, tension:0.35, fill:true }
+      ]
+    },
+    options: {
+      responsive:true, animation:false, interaction:{mode:'index',intersect:false},
+      scales: {
+        x:{ ticks:{color:'#524E4A',maxTicksLimit:6,font:{size:9}}, grid:{color:'#1A1A1A'} },
+        y:{ ticks:{color:'#524E4A',font:{size:9},callback:v=>'€'+f2(v)}, grid:{color:'#1A1A1A'} }
+      },
+      plugins: {
+        legend:{display:false},
+        tooltip:{ callbacks:{ label: ctx=>`${ctx.dataset.label}: €${f2(ctx.parsed.y)}` }}
+      }
+    }
+  });
+
+  // Show the allocation amount in the legend bar
+  setHTML(`${key}-eq-alloc`, `asig: €${f2(a.alloc)}`);
+}
+
+// ================================================================
+//  ASSET VIEWS (tabs)
+// ================================================================
+function buildAssetViews() {
+  const tabBar = $id('tab-bar');
+  const views  = $id('asset-views');
+
+  Object.values(S.assets).forEach(a => {
+    // Tab button
+    const btn = document.createElement('button');
+    btn.id        = `tab-${a.key}`;
+    btn.className = 'tab-off px-4 py-2 text-xs font-semibold whitespace-nowrap transition';
+    btn.onclick   = () => switchTab(a.key);
+    btn.innerHTML = `<span style="color:${a.col}">●</span> ${a.key}`;
+    tabBar.appendChild(btn);
+
+    // View div
+    const div = document.createElement('div');
+    div.id        = `view-${a.key}`;
+    div.className = 'hidden';
+    div.innerHTML = buildAssetHTML(a);
+    views.appendChild(div);
+
+    // Init per-asset chart now that canvas is in DOM
+    initAssetChart(a.key);
+  });
+}
+
+function buildAssetHTML(a) {
+  const k = a.key;
+  return `
+  <div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 rounded-full" style="background:${a.col}"></div>
+        <span class="text-lg font-bold" style="color:${a.col}">${k}/USDT</span>
+        <span id="${k}-hp" class="text-2xl font-bold mono text-gray-300">--</span>
+      </div>
+      <span id="${k}-pch" class="text-sm mono text-gray-500"></span>
+    </div>
+
+    <!-- Asset KPIs -->
+    <div class="metric-grid">
+      <div class="card p-3">
+        <div class="text-xs text-gray-500">V.ACTIVO</div>
+        <div id="${k}-av" class="text-xl font-bold mono mt-1">€0.00</div>
+      </div>
+      <div class="card p-3">
+        <div class="text-xs text-gray-500">RESERVA USDT</div>
+        <div id="${k}-rv" class="text-xl font-bold mono text-yellow-400 mt-1">€0.00</div>
+      </div>
+      <div class="card p-3">
+        <div class="text-xs text-gray-500">GRID PROFIT</div>
+        <div id="${k}-gp" class="text-xl font-bold mono text-emerald-400 mt-1">€0.00</div>
+      </div>
+      <div class="card p-3">
+        <div class="text-xs text-gray-500">TRADES</div>
+        <div id="${k}-tc" class="text-xl font-bold mono text-cyan-400 mt-1">0</div>
+      </div>
+    </div>
+
+    <!-- Per-asset Equity Curve -->
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold tracking-wide" style="color:${a.col}">${k}</span>
+          <h3 class="text-xs font-semibold text-gray-400 tracking-widest">EQUITY CURVE — BOT vs HOLD</h3>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex gap-0.5">
+            <button onclick="setAssetEqPeriod('${k}','12h')" id="${k}-eq-btn-12h" class="px-1.5 py-0.5 text-xs rounded text-gray-600 hover:text-gray-400 transition">12h</button>
+            <button onclick="setAssetEqPeriod('${k}','24h')" id="${k}-eq-btn-24h" class="px-1.5 py-0.5 text-xs rounded font-semibold text-cyan-400 bg-cyan-900/30">24h</button>
+            <button onclick="setAssetEqPeriod('${k}','7d')"  id="${k}-eq-btn-7d"  class="px-1.5 py-0.5 text-xs rounded text-gray-600 hover:text-gray-400 transition">7d</button>
+            <button onclick="setAssetEqPeriod('${k}','1m')"  id="${k}-eq-btn-1m"  class="px-1.5 py-0.5 text-xs rounded text-gray-600 hover:text-gray-400 transition">1m</button>
+            <button onclick="setAssetEqPeriod('${k}','12m')" id="${k}-eq-btn-12m" class="px-1.5 py-0.5 text-xs rounded text-gray-600 hover:text-gray-400 transition">12m</button>
+          </div>
+          <div class="flex gap-3 text-xs">
+            <span class="flex items-center gap-1"><span class="inline-block w-4 h-0.5" style="background:${a.col}"></span>e3Argos</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-4 h-0.5 bg-gray-600"></span>Hold</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-4 text-xs mb-2">
+        <span class="text-gray-600">e3Argos: <span id="${k}-eq-pnl-bot"  class="mono font-semibold text-gray-500">—</span></span>
+        <span class="text-gray-600">Hold: <span id="${k}-eq-pnl-hold" class="mono font-semibold text-gray-500">—</span></span>
+        <span id="${k}-eq-alloc" class="text-gray-700 mono ml-auto text-xs"></span>
+      </div>
+      <canvas id="${k}-eq-chart" height="80"></canvas>
+    </div>
+
+    <!-- Parameters -->
+    <div class="card p-4" id="${k}-params">
+      <h3 class="text-xs font-semibold text-gray-400 tracking-widest mb-4">PARÁMETROS DEL BOT</h3>
+      <div class="space-y-5">
+
+        <!-- Reserve -->
+        <div>
+          <div class="flex justify-between mb-1">
+            <label class="text-xs text-gray-500">Reserva USDT</label>
+            <div class="flex items-center gap-2">
+              <span id="${k}-sl-rec-res" class="text-xs text-gray-700"></span>
+              <span id="${k}-sl-res-v" class="text-xs font-semibold text-cyan-400">${(a.reserve*100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <div class="sl-wrap">
+            <input type="range" min="10" max="80" step="1" value="${(a.reserve*100).toFixed(0)}"
+              id="${k}-sl-res" oninput="onSlider('${k}','res',this.value)">
+            <div class="sl-notch" id="${k}-notch-res"></div>
+          </div>
+        </div>
+
+        <!-- Profit -->
+        <div>
+          <div class="flex justify-between mb-1">
+            <label class="text-xs text-gray-500">Grid Profit Target</label>
+            <div class="flex items-center gap-2">
+              <span id="${k}-sl-rec-pft" class="text-xs text-gray-700"></span>
+              <span id="${k}-sl-pft-v" class="text-xs font-semibold text-cyan-400">${(a.profit*100).toFixed(2)}%</span>
+            </div>
+          </div>
+          <div class="sl-wrap">
+            <input type="range" min="0.10" max="5.00" step="0.05" value="${(a.profit*100).toFixed(2)}"
+              id="${k}-sl-pft" oninput="onSlider('${k}','pft',this.value)">
+            <div class="sl-notch" id="${k}-notch-pft"></div>
+          </div>
+        </div>
+
+        <!-- Weight -->
+        <div>
+          <div class="flex justify-between mb-1">
+            <label class="text-xs text-gray-500">Peso en Cartera</label>
+            <div class="flex items-center gap-2">
+              <span id="${k}-sl-rec-w" class="text-xs text-gray-700"></span>
+              <span id="${k}-sl-w-v" class="text-xs font-semibold text-cyan-400">${(a.weight*100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <div class="sl-wrap">
+            <input type="range" min="1" max="60" step="1" value="${(a.weight*100).toFixed(0)}"
+              id="${k}-sl-w" oninput="onSlider('${k}','w',this.value)">
+            <div class="sl-notch" id="${k}-notch-w"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Predictive Order Book -->
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-xs font-semibold text-gray-400 tracking-widest">📖 NIVELES DE ACTIVACIÓN (ESTÁTICOS)</h3>
+      </div>
+      <!-- pRef + distancias al trigger -->
+      <div id="${k}-pref-display" class="text-xs mb-3 pb-2 border-b border-gray-800"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs text-gray-600 mb-2">COMPRAS (activo + 4 siguientes)</div>
+          <table class="w-full text-xs">
+            <thead><tr class="text-gray-700">
+              <th class="text-left py-1">PRECIO</th>
+              <th class="text-right py-1">DIST%</th>
+              <th class="text-right py-1">VALOR €</th>
+              <th class="text-right py-1">COMISIÓN</th>
+              <th class="text-right py-1">PROFIT NET</th>
+            </tr></thead>
+            <tbody id="${k}-ob-buy"></tbody>
+          </table>
+        </div>
+        <div>
+          <div class="text-xs text-gray-600 mb-2">VENTA ACTIVA</div>
+          <table class="w-full text-xs">
+            <thead><tr class="text-gray-700">
+              <th class="text-left py-1">PRECIO</th>
+              <th class="text-right py-1">DIST%</th>
+              <th class="text-right py-1">VALOR €</th>
+              <th class="text-right py-1">COMISIÓN</th>
+              <th class="text-right py-1">PROFIT NET</th>
+            </tr></thead>
+            <tbody id="${k}-ob-sell"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Asset history -->
+    <div class="card p-4">
+      <h3 class="text-xs font-semibold text-gray-400 tracking-widest mb-3">HISTORIAL ${k}</h3>
+      <div id="${k}-hist" class="overflow-y-auto max-h-52 space-y-1 text-xs">
+        <div class="text-gray-700 text-center py-4">Sin trades aún</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAssetViews() {
+  Object.values(S.assets).forEach(a => {
+    const k = a.key;
+    if(!$id(`${k}-hp`)) return;   // view not built yet
+
+    const p    = S.prices[k]||0;
+    const prev = S.prevPrices[k]||p;
+    const dir  = p>prev?'up':p<prev?'down':'neu';
+    const av   = a.qty * p;
+    const chg  = a.t0Price>0 ? (p-a.t0Price)/a.t0Price : 0;
+
+    $id(`${k}-hp`).textContent = `$${pf(p)}`;
+    $id(`${k}-hp`).className   = `text-2xl font-bold mono price-${dir}`;
+    setHTML(`${k}-pch`, `<span class="${col(chg)}">${pct(chg)} vs t₀</span>`);
+
+    setHTML(`${k}-av`, `€${f2(av)}`);
+    setHTML(`${k}-rv`, `€${f2(a.reserveVal)}`);
+    setHTML(`${k}-gp`, `€${f2(a.gridProfit)}`);
+    setHTML(`${k}-tc`, `${a.tradeCount}`);
+
+    // Per-asset equity chart PnL labels
+    if(p && a.t0Price) {
+      const botVal = av + a.reserveVal;
+      const bPct   = (botVal      - a.alloc) / a.alloc;
+      const hPct   = (a.holdQty*p - a.alloc) / a.alloc;
+      const bEl2 = $id(`${k}-eq-pnl-bot`), hEl2 = $id(`${k}-eq-pnl-hold`);
+      if(bEl2){ bEl2.textContent = pct(bPct); bEl2.className = `mono font-semibold ${col(bPct)}`; }
+      if(hEl2){ hEl2.textContent = pct(hPct); hEl2.className = `mono font-semibold ${col(hPct)}`; }
+    }
+
+    renderOrderBook(k);
+    renderAssetHistory(k);
+  });
+}
+
+function renderOrderBook(k) {
+  const {buys, sells} = getPredOrders(k);
+  const a = S.assets[k];
+  const p = S.prices[k] || 0;
+
+  // ── Indicador pRef + distancias al trigger ────────────────────
+  const pRefEl = $id(`${k}-pref-display`);
+  if(pRefEl && a.pRef && p) {
+    const dB = (a.buyLevel  - p) / p * 100;
+    const dS = (a.sellLevel - p) / p * 100;
+    pRefEl.innerHTML = `
+      <span class="text-gray-600">P<sub>ref</sub></span>
+      <span class="mono text-cyan-400 ml-1">$${pf(a.pRef)}</span>
+      <span class="ml-3 text-gray-600">→ Compra</span>
+      <span class="mono ${dB<0?'text-emerald-400':'text-gray-500'} ml-1">${dB.toFixed(2)}%</span>
+      <span class="ml-3 text-gray-600">→ Venta</span>
+      <span class="mono ${dS>0?'text-orange-400':'text-gray-500'} ml-1">+${dS.toFixed(2)}%</span>`;
+  }
+
+  // ── Tabla de compras (nivel activo + 4 siguientes) ────────────
+  const buyTbody = $id(`${k}-ob-buy`);
+  if(buyTbody){
+    buyTbody.innerHTML = buys.map((b,i)=>`
+    <tr class="border-b border-gray-800/30 ${i===0?'bg-emerald-950/20':''}">
+      <td class="py-1 ob-buy mono ${i===0?'font-bold':'opacity-60'}">
+        $${pf(b.price)}
+        ${i===0?'<span class="ml-1 text-[9px] text-emerald-600">●ACTIVO</span>':''}
+      </td>
+      <td class="text-right py-1 text-gray-500 mono text-[10px]">${b.distPct.toFixed(2)}%</td>
+      <td class="text-right py-1 text-gray-400 mono">€${f2(b.value)}</td>
+      <td class="text-right py-1 text-red-400/60 mono">-€${(b.fee).toFixed(4)}</td>
+      <td class="text-right py-1 ${col(b.profit)} mono">€${f4(b.profit)}</td>
+    </tr>`).join('');
+  }
+
+  // ── Tabla de ventas (nivel activo) ────────────────────────────
+  const sellTbody = $id(`${k}-ob-sell`);
+  if(sellTbody && sells.length){
+    sellTbody.innerHTML = sells.map(s=>`
+    <tr class="border-b border-gray-800/30 bg-red-950/20">
+      <td class="py-1 ob-sell mono font-bold">
+        $${pf(s.price)}
+        <span class="ml-1 text-[9px] text-red-600">●ACTIVO</span>
+      </td>
+      <td class="text-right py-1 text-gray-500 mono text-[10px]">+${s.distPct.toFixed(2)}%</td>
+      <td class="text-right py-1 text-gray-400 mono">€${f2(s.value)}</td>
+      <td class="text-right py-1 text-red-400/60 mono">-€${(s.fee).toFixed(4)}</td>
+      <td class="text-right py-1 ${col(s.profit)} mono">€${f4(s.profit)}</td>
+    </tr>`).join('');
+  }
+}
+
+function renderAssetHistory(k) {
+  const container = $id(`${k}-hist`);
+  if(!container) return;
+  const assetTrades = S.trades.filter(t=>t.asset===k).slice(0,30);
+  if(!assetTrades.length) return;
+
+  const a = S.assets[k];
+  const clsMap = { INIT:'l-init', BUY:'l-buy', SELL:'l-sell', BUYREB:'l-reb', SELLREB:'l-reb' };
+  container.innerHTML = assetTrades.map(t=>`
+  <div class="pl-2 py-1 bg-gray-800/20 rounded ${clsMap[t.type]||'l-buy'} flex justify-between items-center">
+    <div>
+      <span class="${t.type.includes('SELL')?'text-red-400':'text-emerald-400'}">
+        ${t.type.includes('SELL')?'▼':'▲'} $${pf(t.price)}
+      </span>
+      <span class="text-gray-700 ml-2">${t.qty.toFixed(6)}</span>
+      <span class="text-gray-800 ml-2">fee:€${t.fee.toFixed(5)}</span>
+    </div>
+    <span class="mono ${col(t.pnl)}">${euro(t.pnl)}</span>
+  </div>`).join('');
+}
+
+// ================================================================
+//  SLIDER CONTROLS
+// ================================================================
+function onSlider(k, param, raw) {
+  const a = S.assets[k];
+  const v = parseFloat(raw);
+
+  if(param==='res'){
+    const prev = a.reserve;
+    a.reserve = v/100;
+    setHTML(`${k}-sl-res-v`, `${v.toFixed(0)}%`);
+    execRebalance(k, prev, a.reserve, 'reserve');
+  } else if(param==='pft'){
+    a.profit = v/100;
+    setHTML(`${k}-sl-pft-v`, `${v.toFixed(2)}%`);
+    // ★ Cambio de profit% → recalcular niveles estáticos desde precio actual
+    if(S.prices[k]) setPRef(a, S.prices[k]);
+  } else if(param==='w'){
+    const prev = a.weight;
+    a.weight = v/100;
+    setHTML(`${k}-sl-w-v`, `${v.toFixed(0)}%`);
+    execRebalance(k, prev, a.weight, 'weight');
+  }
+  checkDeviation(k);
+}
+
+function execRebalance(k, prevVal, newVal, type) {
+  const a = S.assets[k];
+  const p = S.prices[k];
+  if(!p) return;
+
+  let delta = 0;
+  if(type==='reserve'){
+    // Shift between crypto and reserve
+    const tot = a.qty * p + a.reserveVal;
+    const newActive = tot * (1 - newVal);
+    delta = newActive - (a.qty * p);   // positive = buy more crypto
+  } else if(type==='weight'){
+    const { botTotal } = calcPortfolio();
+    const newAlloc  = botTotal * newVal;
+    const curTotal  = a.qty * p + a.reserveVal;
+    delta = newAlloc - curTotal;
+    a.alloc = newAlloc;
+  }
+
+  if(Math.abs(delta) < 0.3) return;
+
+  const fee    = Math.abs(delta) * COMMISSION;
+  const isBuy  = delta > 0;
+  const netAmt = isBuy ? delta - fee : Math.abs(delta) - fee;
+  const qty    = netAmt / p;
+
+  if(isBuy){
+    a.qty        += qty;
+    a.reserveVal -= delta;
+  } else {
+    a.qty         = Math.max(0, a.qty - qty);
+    a.reserveVal += netAmt;
+  }
+
+  a.activeVal   = a.qty * p;
+  a.targetValue = a.activeVal;
+  // ★ Excepción: cambio manual de parámetros → recalcular pRef al precio actual
+  setPRef(a, p);
+
+  const pnl = -fee;
+  S.trades.unshift({
+    id:`${k}_reb_${Date.now()}`, ts:new Date(), asset:k,
+    type: isBuy ? 'BUYREB' : 'SELLREB',
+    price:p, qty, value:Math.abs(delta), fee, pnl,
+    note:`Rebalanceo ${type} | nuevo pRef $${pf(p)}`
+  });
+  a.tradeCount++;
+}
+
+// ================================================================
+//  GRID OPTIMIZER
+// ================================================================
+function toggleOptimizer() {
+  const panel = $id('opt-panel');
+  const tog   = $id('opt-toggle');
+  const show  = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !show);
+  tog.textContent = show ? '▲ Colapsar' : '▼ Expandir';
+}
+
+function parseOptimizer() {
+  const txt = $id('opt-json').value.trim();
+  const status = $id('opt-status');
+  if(!txt){ status.innerHTML='<span class="text-red-400">JSON vacío</span>'; return; }
+
+  let data;
+  try { data = JSON.parse(txt); } catch(e){
+    status.innerHTML=`<span class="text-red-400">❌ JSON inválido: ${e.message}</span>`;
+    return;
+  }
+
+  S.optimizer = data;
+  let warns = [];
+  let html  = '';
+
+  Object.entries(data).forEach(([k,rec])=>{
+    const a = S.assets[k];
+    if(!a){ html+=`<div class="text-gray-600">⚠️ ${k}: activo no encontrado</div>`; return; }
+
+    if(rec.weight  !== undefined){ a.recWeight  = rec.weight;  setNotch(k,'w',   rec.weight*100,  1, 60);  setHTML(`${k}-sl-rec-w`,   `rec:${(rec.weight*100).toFixed(0)}%`); }
+    if(rec.reserve !== undefined){ a.recReserve = rec.reserve; setNotch(k,'res', rec.reserve*100, 10, 80); setHTML(`${k}-sl-rec-res`, `rec:${(rec.reserve*100).toFixed(0)}%`); }
+    if(rec.profit  !== undefined){ a.recProfit  = rec.profit;  setNotch(k,'pft', rec.profit*100,  0.1,5);  setHTML(`${k}-sl-rec-pft`, `rec:${(rec.profit*100).toFixed(2)}%`); }
+    // Also sync the Configuración Cartera panel notches/labels
+    syncCfgFromOptimizer(k, rec);
+
+    // Deviation check
+    const wDev  = rec.weight  ? Math.abs(rec.weight  - a.weight) / a.weight   : 0;
+    const rDev  = rec.reserve ? Math.abs(rec.reserve - a.reserve) / a.reserve : 0;
+    const devOk = wDev<=0.10 && rDev<=0.10;
+
+    if(!devOk){ warns.push(k); }
+    const paramCard = $id(`${k}-params`);
+    if(paramCard) paramCard.classList.toggle('dev-alert', !devOk);
+
+    html += `<div class="${devOk?'text-emerald-400':'text-orange-400'}">
+      ${devOk?'✓':'⚠️'} ${k}: procesado ${!devOk?`(desv>${((Math.max(wDev,rDev))*100).toFixed(0)}%)`:''}</div>`;
+  });
+
+  if(warns.length) html += `<div class="text-orange-400 mt-1">⚠️ Desviación &gt;10%: ${warns.join(', ')}</div>`;
+
+  status.innerHTML = html;
+  $id('opt-sync').classList.remove('hidden');
+}
+
+function setNotch(k, param, valPct, min, max) {
+  const notch = $id(`${k}-notch-${param}`);
+  if(!notch) return;
+  const pct = Math.max(0, Math.min(100, (valPct - min)/(max - min)*100));
+  notch.style.left = pct + '%';
+  notch.style.display = 'block';
+}
+
+function syncOptimizer() {
+  if(!S.optimizer) return;
+  Object.entries(S.optimizer).forEach(([k,rec])=>{
+    if(!S.assets[k]) return;
+    if(rec.reserve !== undefined){
+      const sl = $id(`${k}-sl-res`);
+      if(sl){ sl.value = (rec.reserve*100).toFixed(0); onSlider(k,'res',(rec.reserve*100).toFixed(0)); }
+    }
+    if(rec.profit !== undefined){
+      const sl = $id(`${k}-sl-pft`);
+      if(sl){ sl.value = (rec.profit*100).toFixed(2); onSlider(k,'pft',(rec.profit*100).toFixed(2)); }
+    }
+    if(rec.weight !== undefined){
+      const sl = $id(`${k}-sl-w`);
+      if(sl){ sl.value = (rec.weight*100).toFixed(0); onSlider(k,'w',(rec.weight*100).toFixed(0)); }
+      // Update Configuración Cartera numeric input
+      const inp = $id(`cfg-cap-${k}`);
+      if(inp){ inp.value = (rec.weight*100).toFixed(0); inp.classList.remove('w-error'); }
+    }
+    // Mirror res/pft to cfg panel sliders
+    if(rec.reserve !== undefined) {
+      const sl2 = $id(`cfg-sl-res-${k}`); if(sl2) sl2.value = (rec.reserve*100).toFixed(0);
+      setHTML(`cfg-res-v-${k}`, `${(rec.reserve*100).toFixed(0)}%`);
+    }
+    if(rec.profit !== undefined) {
+      const sl2 = $id(`cfg-sl-pft-${k}`); if(sl2) sl2.value = (rec.profit*100).toFixed(2);
+      setHTML(`cfg-pft-v-${k}`, `${(rec.profit*100).toFixed(2)}%`);
+    }
+    // Clear rec labels now that values have been applied
+    clearCfgRecLabels(k);
+  });
+
+  validateWeights();
+  updateCapEur();
+
+  const st = $id('opt-status');
+  st.innerHTML += '<div class="text-cyan-400 mt-1">⚡ Parámetros sincronizados. Rebalanceos ejecutados.</div>';
+}
+
+function checkDeviation(k) {
+  const a = S.assets[k];
+  if(!S.optimizer || !S.optimizer[k]) return;
+  const rec  = S.optimizer[k];
+  const wDev = rec.weight  ? Math.abs(rec.weight  - a.weight) / a.weight   : 0;
+  const rDev = rec.reserve ? Math.abs(rec.reserve - a.reserve) / a.reserve : 0;
+  const card = $id(`${k}-params`);
+  if(card) card.classList.toggle('dev-alert', (wDev>0.10 || rDev>0.10));
+}
+
+// ================================================================
+//  TAB NAVIGATION
+// ================================================================
+function switchTab(id) {
+  // Hide all
+  $id('view-GLOBAL').classList.add('hidden');
+  Object.keys(CFG).forEach(k=>{ const v=$id(`view-${k}`); if(v) v.classList.add('hidden'); });
+
+  // Deactivate all tabs
+  $id('tab-GLOBAL').className = 'tab-off px-4 py-2 text-xs font-semibold whitespace-nowrap transition';
+  Object.keys(CFG).forEach(k=>{ const t=$id(`tab-${k}`); if(t) t.className='tab-off px-4 py-2 text-xs font-semibold whitespace-nowrap transition'; });
+
+  // Activate target
+  const view = $id(`view-${id}`);
+  const tab  = $id(`tab-${id}`);
+  if(view) view.classList.remove('hidden');
+  if(tab)  tab.className  = 'tab-on px-4 py-2 text-xs font-semibold whitespace-nowrap transition';
+}
+
+// ================================================================
+//  RESET
+// ================================================================
+function doReset() {
+  const allReady = Object.keys(CFG).every(k=>S.prices[k]>0);
+  if(!allReady){
+    alert('Esperando precios en tiempo real. Intenta en unos segundos.');
+    return;
+  }
+  if(!confirm('¿Resetear t₀ a precios actuales?\nSe limpiarán trades e historial del equity curve.')) return;
+
+  // Clear global equity chart + stored series
+  S.eqTimes = []; S.eqBot = []; S.eqHold = []; S.eqBtc = []; S.btcHoldQty = 0;
+  if(S.eqChart){
+    S.eqChart.data.labels = [];
+    S.eqChart.data.datasets[0].data = [];
+    S.eqChart.data.datasets[1].data = [];
+    if(S.eqChart.data.datasets[2]) S.eqChart.data.datasets[2].data = [];
+    S.eqChart.update('none');
+  }
+  // Clear per-asset equity charts + stored series
+  Object.values(S.assets).forEach(a => {
+    a.eqTimes = []; a.eqBot = []; a.eqHold = [];
+    if(!a.eqChart) return;
+    a.eqChart.data.labels = [];
+    a.eqChart.data.datasets[0].data = [];
+    a.eqChart.data.datasets[1].data = [];
+    a.eqChart.update('none');
+  });
+
+  S.trades  = [];
+  S.t0Time  = new Date();
+  S.t0Prices = {};
+
+  Object.values(S.assets).forEach(a => {
+    const p = S.prices[a.key];
+    if(!p) return;
+
+    S.t0Prices[a.key] = p;
+    a.t0Price = p;
+    setPRef(a, p);     // ★ reset pRef y niveles estáticos al precio actual
+    a.gridProfit = 0;
+    a.tradeCount = 0;
+
+    const activeCapital  = a.alloc * (1 - a.reserve);
+    const reserveCapital = a.alloc * a.reserve;
+
+    const fee        = activeCapital  * COMMISSION;   // EUR → crypto
+    const reserveFee = reserveCapital * COMMISSION;   // EUR → USDC
+    const net        = activeCapital - fee;
+
+    a.qty        = net / p;
+    a.activeVal  = a.qty * p;
+    a.reserveVal = reserveCapital - reserveFee;       // ← comisión aplicada
+    a.targetValue = a.activeVal;
+
+    // Hold: asignación completa sin reserva
+    const holdFeeR = a.alloc * COMMISSION;
+    a.holdQty = (a.alloc - holdFeeR) / p;
+
+    const nowR = new Date();
+    S.trades.push({
+      id:`${a.key}_reset_${Date.now()}`, ts:nowR, asset:a.key, type:'INIT',
+      price:p, qty:a.qty, value:activeCapital, fee, pnl:-fee,
+      note:`Reset t₀ — compra ${a.key}`
+    });
+    S.trades.push({
+      id:`${a.key}_usdc_reset_${Date.now()}`, ts:nowR, asset:a.key, type:'INIT',
+      price:1, qty:a.reserveVal, value:reserveCapital, fee:reserveFee, pnl:-reserveFee,
+      note:`Reset t₀ — compra reserva USDC`
+    });
+  });
+
+  renderUI();
+  syncToCloud(true);   // Forzar sync inmediato tras reset
+}
+
+// ================================================================
+//  CLOUD SYNC — Google Sheets + Make.com Webhook
+// ================================================================
+
+// ── Indicador visual ──────────────────────────────────────────
+const SYNC_UI = {
+  idle:     { dot:'bg-gray-700',                         lbl:'Cloud: —' },
+  loading:  { dot:'bg-yellow-400 animate-pulse',         lbl:'Cargando estado…' },
+  backfill: { dot:'bg-blue-400 animate-pulse',           lbl:'Actualizando historial…' },
+  syncing:  { dot:'bg-yellow-400 animate-pulse',         lbl:'Sincronizando…' },
+  ok:       { dot:'bg-emerald-500',                      lbl:'Sincronizado ✓' },
+  error:    { dot:'bg-red-500',                          lbl:'Error de sync' },
+};
+
+function setSyncStatus(status, extra) {
+  S.syncStatus = status;
+  const ui  = SYNC_UI[status] || SYNC_UI.idle;
+  const dot = $id('sync-dot'), lbl = $id('sync-label');
+  if(dot) dot.className = `w-2 h-2 rounded-full ${ui.dot}`;
+  if(lbl) lbl.textContent = extra ? `${ui.lbl} — ${extra}` : ui.lbl;
+}
+
+// ── Parser CSV clave-valor ────────────────────────────────────
+// Formato esperado en Google Sheets (A=clave, B=valor):
+//   lastSync   , 1720000000000
+//   t0Time     , 1719900000000
+//   BTC_qty    , 0.01234
+//   BTC_pRef   , 65000.00
+//   …etc para cada activo
+function parseSheetCSV(csv) {
+  const map = {};
+  csv.trim().split('\n').forEach(line => {
+    // Quitar comillas, separar por primera coma
+    const clean = line.replace(/\r/g, '');
+    const comma = clean.indexOf(',');
+    if(comma < 0) return;
+    const k = clean.slice(0, comma).trim().replace(/^"|"$/g, '');
+    const v = clean.slice(comma + 1).trim().replace(/^"|"$/g, '');
+    if(k) map[k] = v;
+  });
+  return map;
+}
+
+// ── Aplica el estado del sheet al objeto S ───────────────────
+function applySheetState(data) {
+  if(data.t0Time && parseInt(data.t0Time) > 0)
+    S.t0Time = new Date(parseInt(data.t0Time));
+
+  Object.keys(CFG).forEach(k => {
+    const a = S.assets[k];
+    if(!a || !data[`${k}_t0Price`]) return;
+
+    const n = f => parseFloat(data[`${k}_${f}`]) || 0;
+    const i = f => parseInt(data[`${k}_${f}`])   || 0;
+
+    a.t0Price     = n('t0Price');
+    a.qty         = n('qty');
+    a.pRef        = n('pRef');
+    a.reserveVal  = n('reserveVal');
+    a.activeVal   = n('activeVal');
+    a.targetValue = n('targetValue') || a.activeVal;
+    a.holdQty     = n('holdQty');
+    a.gridProfit  = n('gridProfit');
+    a.tradeCount  = i('tradeCount');
+    a.weight      = n('weight')  || a.weight;
+    a.reserve     = n('reserve') || a.reserve;
+    a.profit      = n('profit')  || a.profit;
+
+    // Recalcular niveles desde pRef guardado
+    a.buyLevel  = a.pRef * (1 - a.profit);
+    a.sellLevel = a.pRef * (1 + a.profit);
+
+    S.t0Prices[k] = a.t0Price;
+  });
+
+  S.lastSyncTs = parseInt(data.lastSync) || 0;
+}
+
+// ── Descarga velas de Binance para backfill ──────────────────
+async function fetchKlines(symbol, fromMs, toMs) {
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}` +
+    `&interval=${BACKFILL_TF}&startTime=${fromMs}&endTime=${toMs}&limit=${BACKFILL_LIMIT}`;
+  const resp = await fetch(url, { cache:'no-cache' });
+  if(!resp.ok) throw new Error(`Binance klines ${symbol}: HTTP ${resp.status}`);
+  return resp.json();  // [[openTime, open, high, low, close, …], …]
+}
+
+// ── Función Forense: rellena el gap de tiempo sin datos ──────
+async function backfillHistory(fromMs) {
+  setSyncStatus('backfill');
+  const toMs      = Date.now();
+  const gapMin    = Math.round((toMs - fromMs) / 60000);
+  let   totalSim  = 0;
+
+  try {
+    for(const key of Object.keys(CFG)) {
+      const a = S.assets[key];
+      if(!a.t0Price || !a.pRef) continue;   // activo no inicializado
+
+      const sym    = CFG[key].sym;
+      const klines = await fetchKlines(sym, fromMs, toMs);
+      if(!klines.length) continue;
+
+      for(const bar of klines) {
+        // bar = [openTime, open, high, low, close, volume, …]
+        const high  = parseFloat(bar[2]);
+        const low   = parseFloat(bar[3]);
+        const close = parseFloat(bar[4]);
+
+        // Simular si la vela tocó niveles de grid (orden: sell primero si ambos tocados)
+        if(high >= a.sellLevel) {
+          runGrid(key, a.sellLevel);   // ejecución exacta en el nivel
+          totalSim++;
+        }
+        if(low <= a.buyLevel && a.reserveVal > 0.5) {
+          runGrid(key, a.buyLevel);
+          totalSim++;
+        }
+
+        // Actualizar precio visible con el cierre de la última vela
+        S.prices[key] = close;
+      }
+    }
+
+    const msg = totalSim > 0 ? `${totalSim} trades sim.` : `${gapMin}m ok`;
+    setSyncStatus('ok', msg);
+    renderUI();
+
+  } catch(e) {
+    console.error('backfillHistory:', e);
+    setSyncStatus('error', e.message.slice(0, 40));
+  }
+}
+
+// ── Carga estado inicial desde Google Sheets ─────────────────
+async function loadFromSheet() {
+  if(!GSHEET_URL) return;
+  setSyncStatus('loading');
+
+  try {
+    const resp = await fetch(GSHEET_URL, { cache:'no-cache' });
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const text = await resp.text();
+    const data = parseSheetCSV(text);
+
+    // Debug: mostrar claves encontradas en consola
+    const keys = Object.keys(data);
+    console.log('[loadFromSheet] filas recibidas:', keys.length, '| primeras claves:', keys.slice(0,5));
+
+    if(!data.lastSync && !data.BTC_t0Price) {
+      // Hoja vacía o sin estado guardado — arranque normal
+      console.warn('[loadFromSheet] Hoja sin datos de estado (sin lastSync ni BTC_t0Price)');
+      setSyncStatus('idle');
+      return;
+    }
+
+    applySheetState(data);
+
+    // Comprobar gap: si hay más de BACKFILL_GAP ms sin datos → backfill
+    const gap = Date.now() - S.lastSyncTs;
+    if(S.lastSyncTs > 0 && gap > BACKFILL_GAP) {
+      await backfillHistory(S.lastSyncTs);
+    } else {
+      setSyncStatus('ok');
+    }
+
+    renderUI();
+
+  } catch(e) {
+    console.error('[loadFromSheet] error:', e.message);
+    setSyncStatus('error', e.message.slice(0, 40));
+    // Reintento automático en 30s
+    setTimeout(loadFromSheet, 30000);
+  }
+}
+
+// ── Construye el payload del estado actual ───────────────────
+function buildSyncPayload() {
+  const payload = {
+    lastSync: Date.now(),
+    t0Time:   S.t0Time ? S.t0Time.getTime() : 0,
+  };
+  Object.values(S.assets).forEach(a => {
+    const k = a.key;
+    payload[`${k}_qty`]         = a.qty;
+    payload[`${k}_pRef`]        = a.pRef;
+    payload[`${k}_reserveVal`]  = a.reserveVal;
+    payload[`${k}_activeVal`]   = a.activeVal;
+    payload[`${k}_targetValue`] = a.targetValue;
+    payload[`${k}_t0Price`]     = a.t0Price;
+    payload[`${k}_holdQty`]     = a.holdQty;
+    payload[`${k}_gridProfit`]  = a.gridProfit;
+    payload[`${k}_tradeCount`]  = a.tradeCount;
+    payload[`${k}_weight`]      = a.weight;
+    payload[`${k}_reserve`]     = a.reserve;
+    payload[`${k}_profit`]      = a.profit;
+  });
+  return payload;
+}
+
+// ── Envía estado al Webhook de Make.com (debounced) ──────────
+// force=true: ignora debounce (p.ej. tras Reset t₀)
+function syncToCloud(force = false) {
+  if(!WEBHOOK_URL || WEBHOOK_URL.includes('TU_WEBHOOK')) return;
+
+  clearTimeout(S.syncTimer);
+  const delay = force ? 0 : SYNC_DEBOUNCE;
+
+  S.syncTimer = setTimeout(async () => {
+    setSyncStatus('syncing');
+    try {
+      const resp = await fetch(WEBHOOK_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(buildSyncPayload()),
+      });
+      if(!resp.ok) throw new Error(`Webhook HTTP ${resp.status}`);
+
+      S.lastSyncTs = Date.now();
+      setSyncStatus('ok');
+
+    } catch(e) {
+      console.error('syncToCloud:', e);
+      setSyncStatus('error', e.message.slice(0, 40));
+      // Reintento automático en 30s
+      setTimeout(() => syncToCloud(true), 30000);
+    }
+  }, delay);
+}
+
+// ================================================================
+//  CLOUD OPTIMIZER CONFIG
+// ================================================================
+
+// ── Helper: tiempo transcurrido desde ts ─────────────────────
+function timeSince(ts) {
+  if(!ts) return '—';
+  const d = Date.now() - ts;
+  const m = Math.floor(d / 60000);
+  const h = Math.floor(m / 60);
+  if(h > 0) { const rm = m % 60; return rm > 0 ? `hace ${h}h ${rm}m` : `hace ${h}h`; }
+  return m > 0 ? `hace ${m}m` : 'ahora';
+}
+
+// ── Actualiza indicadores cloud en el header ─────────────────
+function renderCloudMeta() {
+  const dot   = $id('cloud-dot');
+  const lbl   = $id('cloud-label');
+  const badge = $id('tier-badge');
+  const card  = $id('optimizer-card');
+
+  if(!S.cloudMeta || !S.cloudSyncTs) {
+    if(dot)   dot.className   = 'w-2 h-2 rounded-full bg-gray-700';
+    if(lbl)   lbl.textContent = 'Optimizer: —';
+    if(badge) badge.className = 'hidden';
+    return;
+  }
+
+  const m    = S.cloudMeta;
+  const ageH = (Date.now() - S.cloudSyncTs) / 3600000;
+
+  // Dot color: azul <5h, gris 5-9h, rojo >9h
+  const dotCls = ageH < 5
+    ? 'w-2 h-2 rounded-full bg-blue-400'
+    : ageH < 9
+      ? 'w-2 h-2 rounded-full bg-gray-500'
+      : 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+
+  if(dot)   dot.className   = dotCls;
+  if(lbl)   lbl.textContent = `Cloud: ${timeSince(S.cloudSyncTs)}`;
+
+  // Tier badge
+  if(badge) {
+    if(m.defensive_mode) {
+      badge.textContent = '⚠ DEFENSIVO';
+      badge.className   = 'text-xs font-bold px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-700';
+    } else {
+      const tierColors = { pro:'bg-cyan-950 text-cyan-400 border-cyan-700',
+                           micro:'bg-yellow-950 text-yellow-400 border-yellow-700',
+                           whale:'bg-purple-950 text-purple-400 border-purple-700' };
+      const k = (m.tier||'pro').toLowerCase();
+      badge.textContent = `${(m.tier||'PRO').toUpperCase()} · ${m.top_n} activos`;
+      badge.className   = `text-xs font-bold px-1.5 py-0.5 rounded border ${tierColors[k] || tierColors.pro}`;
+    }
+  }
+
+  // Optimizer card en Global view
+  if(card) {
+    const nextMs    = (m.cycleTs || S.cloudSyncTs) + CLOUD_SYNC_INTERVAL_MS;
+    const nextIn    = nextMs - Date.now();
+    const nextLabel = nextIn > 0 ? timeSince(Date.now() - nextIn).replace('hace ','en ') : '⏳ inminente';
+    const ageOpt    = (Date.now() - (m.cycleTs || S.cloudSyncTs)) / 3600000;
+    const status    = ageOpt < 4.5 ? '🟢 Activo' : ageOpt < 9 ? '🟡 Pendiente' : '🔴 Retrasado';
+    const totalCap  = m.capital_eur || INIT_CAP;
+    const cap       = Object.values(CFG).reduce((s,c)=>s+(c.alloc||0),0);
+    const res       = totalCap - cap;
+
+    card.innerHTML = `
+      <div class="text-xs text-gray-500 mb-1">ÚLTIMO CICLO OPTIMIZER</div>
+      <div class="flex items-baseline gap-2 mb-1">
+        <span class="text-lg font-bold mono text-cyan-400">${status}</span>
+      </div>
+      <div class="text-xs text-gray-500 space-y-0.5 mono">
+        <div class="flex justify-between"><span>Ciclo</span><span class="text-gray-300">${m.timestamp ? m.timestamp.replace('T',' ').slice(0,16)+'Z' : '—'}</span></div>
+        <div class="flex justify-between"><span>Tier</span><span class="text-gray-300">${m.tier||'—'} · ${m.top_n||0} activos</span></div>
+        <div class="flex justify-between"><span>Capital</span><span class="text-gray-300">€${pf(totalCap)}</span></div>
+        <div class="flex justify-between"><span>Próximo</span><span class="text-gray-300">${nextLabel}</span></div>
+      </div>`;
+  }
+
+  // Banner defensivo
+  const banner = $id('defensive-banner');
+  if(banner) banner.classList.toggle('hidden', !m.defensive_mode);
+}
+
+// ── Parser CSV del optimizer ─────────────────────────────────
+function parseCloudCSV(csv) {
+  const lines  = csv.trim().split('\n').map(l => l.replace(/\r/g,''));
+  if(lines.length < 2) throw new Error('CSV vacío o sin datos');
+
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  const idx     = h => headers.indexOf(h);
+
+  const rows = lines.slice(1).map(line => {
+    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
+    const row  = {};
+    headers.forEach((h,i) => row[h] = cols[i] || '');
+    return row;
+  }).filter(r => r.asset);
+
+  if(!rows.length) throw new Error('Sin filas de activos en CSV');
+
+  // Metadatos del ciclo (primera fila)
+  const first = rows[0];
+  const meta = {
+    timestamp:      first.timestamp    || '',
+    cycleTs:        first.timestamp ? new Date(first.timestamp).getTime() : Date.now(),
+    tier:           first.tier         || 'Pro',
+    capital_eur:    parseFloat(first.capital_eur) || INIT_CAP,
+    top_n:          parseInt(first.top_n)         || rows.length,
+    defensive_mode: (first.defensive_mode||'').toLowerCase() === 'true',
+  };
+
+  // Construir nuevo CFG
+  const newCFG = {};
+  rows.forEach(r => {
+    const key = r.asset.toUpperCase();
+    const sym = key + 'USDT';
+    newCFG[key] = {
+      sym,
+      w:     parseFloat(r.weight)         || 0,
+      res:   parseFloat(r.reserve)        || 0.40,
+      pft:   parseFloat(r.profit_per_grid)|| 0.006,
+      col:   ASSET_COLORS[key]            || '#94a3b8',
+      alloc: meta.capital_eur * (parseFloat(r.weight) || 0),
+    };
+  });
+
+  return { meta, newCFG };
+}
+
+// ── Reinicia el estado con el nuevo CFG sin recargar la página ─
+function rebuildFromCloudConfig() {
+  // 1. Cerrar WebSocket
+  if(S.ws) { try { S.ws.close(); } catch(e){} S.ws = null; }
+  clearTimeout(S.wsTimer);
+
+  // 2. Archivar trades actuales
+  S.archivedTrades = [...S.archivedTrades, ...S.trades];
+  S.trades = [];
+
+  // 3. Destruir charts existentes
+  if(S.eqChart)   { S.eqChart.destroy();   S.eqChart   = null; }
+  if(S.distChart) { S.distChart.destroy(); S.distChart = null; }
+  Object.values(S.assets).forEach(a => {
+    if(a.eqChart) { a.eqChart.destroy(); a.eqChart = null; }
+  });
+
+  // 4. Resetear estado de assets y equity
+  S.assets    = {};
+  S.eqTimes   = []; S.eqBot = []; S.eqHold = []; S.eqBtc = []; S.btcHoldQty = 0;
+  S.t0Time    = null; S.t0Prices = {};
+  S.prices    = {}; S.prevPrices = {};
+
+  // 5. Reconstruir DOM: tabs + vistas de activo + cfg rows
+  const tabBar = $id('tab-bar');
+  // Eliminar tabs de activos (mantener GLOBAL)
+  [...tabBar.children].forEach(el => { if(el.id !== 'tab-GLOBAL') el.remove(); });
+  // Limpiar vistas de activos
+  const av = $id('asset-views');
+  if(av) av.innerHTML = '';
+
+  buildAssetViews();
+  buildCfgRows();
+
+  // 6. Re-inicializar charts
+  initChart();
+  initDistChart();
+
+  // 7. Reconectar WS con nuevos símbolos
+  connectWS();
+
+  // 8. Resetear tab activo
+  switchTab('GLOBAL');
+
+  // Banner defensivo
+  const banner = $id('defensive-banner');
+  if(banner) banner.classList.toggle('hidden', !(S.cloudMeta && S.cloudMeta.defensive_mode));
+
+  renderCloudMeta();
+}
+
+// ── Fetch principal: descarga CSV optimizer y aplica config ───
+async function fetchCloudConfig() {
+  const btn = $id('sync-btn');
+  if(btn) { btn.textContent = '⏳'; btn.disabled = true; }
+
+  const cloudLbl = $id('cloud-label');
+  if(cloudLbl) cloudLbl.textContent = 'Cloud: cargando…';
+
+  try {
+    if(!SHEETS_CSV_URL) throw new Error('URL no configurada');
+
+    const resp = await fetch(SHEETS_CSV_URL, { cache:'no-cache' });
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const { meta, newCFG } = parseCloudCSV(await resp.text());
+
+    // Actualizar CFG y meta globales
+    CFG = newCFG;
+    S.cloudMeta   = meta;
+    S.cloudSyncTs = Date.now();
+
+    // Reconstruir simulación con nuevo CFG
+    rebuildFromCloudConfig();
+
+    if(btn) { btn.textContent = '✓ Sync'; btn.disabled = false; setTimeout(()=>{ btn.textContent='☁ Sync'; },3000); }
+
+  } catch(e) {
+    console.error('fetchCloudConfig:', e);
+    if(cloudLbl) cloudLbl.textContent = `Cloud: error de red`;
+    if(btn) { btn.textContent = '☁ Sync'; btn.disabled = false; }
+    // Mantiene CFG fallback — no reinicia la simulación
+  }
+}
+
+// ================================================================
+//  BOOT
+// ================================================================
+async function boot() {
+  // 0. Mostrar banner si se abre como archivo local (file://) → CORS bloqueará el sync
+  if(window.location.protocol === 'file:') {
+    const b = $id('file-protocol-banner');
+    if(b) b.classList.remove('hidden');
+  }
+
+  // 1. Intentar cargar config del optimizer (con fallback si falla)
+  await fetchCloudConfig().catch(() => {});
+
+  // 2. Construir UI con CFG resultante (cloud o fallback)
+  buildAssetViews();
+  buildCfgRows();
+  initChart();
+  initDistChart();
+
+  // 3. Cargar estado persistido desde Google Sheets
+  loadFromSheet();
+
+  // 4. Conectar WebSocket de precios
+  connectWS();
+
+  if(window.lucide) lucide.createIcons();
+
+  // 5. Refresh periódico de UI y cloud meta
+  setInterval(renderUI, 2000);
+  setInterval(renderCloudMeta, 60000);          // actualiza "hace Xm" cada minuto
+  setInterval(fetchCloudConfig, CLOUD_SYNC_INTERVAL_MS);  // re-sync optimizer cada 4h
+}
+
+document.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
