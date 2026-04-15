@@ -584,7 +584,7 @@
 //  CONSTANTS & CONFIG
 // ================================================================
 const COMMISSION  = 0.0005;   // 0.05%
-const INIT_CAP    = 1000;     // €
+let INIT_CAP      = 1000;     // € — se sobreescribe con capital_eur del optimizer
 const EQ_INTERVAL   = 5000;    // equity sample ms
 const MAX_EQ_PTS    = 300;     // chart points (legacy)
 const MAX_EQ_STORED = 17280;   // ~24h at 5s — max stored points
@@ -2889,20 +2889,21 @@ function parseCloudCSV(csv) {
   };
 
   // Construir nuevo CFG
+  // Normalizar pesos (pueden no sumar exactamente 1.0 por redondeo del optimizer)
+  const totalW = rows.reduce((s, r) => s + (parseFloat(r.weight) || 0), 0) || 1;
   const newCFG = {};
   rows.forEach(r => {
-    const key   = r.asset.trim().toUpperCase();
+    const key    = r.asset.trim().toUpperCase();
     // Símbolo Binance: si el asset ya termina en USDT usarlo tal cual, si no añadirlo
-    const sym   = key.endsWith('USDT') ? key : key + 'USDT';
-    const weight = parseFloat(r.weight) || 0;
+    const sym    = key.endsWith('USDT') ? key : key + 'USDT';
+    const weight = (parseFloat(r.weight) || 0) / totalW;  // peso normalizado → suma exacta 1.0
     newCFG[key] = {
       sym,
       w:         weight,
       res:       parseFloat(r.reserve)         || 0.40,
       pft:       parseFloat(r.profit_per_grid) || parseFloat(r.profit) || 0.006,
       col:       ASSET_COLORS[key]             || '#94a3b8',
-      alloc:     meta.capital_eur * weight,
-      // Precio de referencia del optimizer (si disponible)
+      alloc:     meta.capital_eur * weight,    // capital real definido por el optimizer
       pRefCloud: parseFloat(r.price_ref)       || 0,
     };
   });
@@ -2912,56 +2913,118 @@ function parseCloudCSV(csv) {
 
 // ── Reinicia el estado con el nuevo CFG sin recargar la página ─
 function rebuildFromCloudConfig() {
-  // 1. Cerrar WebSocket
+  // ── 0. Capturar estado actual antes de cualquier reset ────────
+  const prevAssets = Object.assign({}, S.assets);   // copia superficial por key
+  const prevPrices = Object.assign({}, S.prices);
+
+  // Valor total real del portfolio en este momento
+  const hasActivePortfolio = Object.values(prevAssets).some(a => a.t0Price > 0);
+  let totalValue = 0;
+  if(hasActivePortfolio) {
+    // Rebalanceo mid-run: usar valor de mercado actual
+    Object.values(prevAssets).forEach(a => {
+      const p = prevPrices[a.key] || a.t0Price || 0;
+      totalValue += (a.qty * p) + a.reserveVal;
+    });
+  }
+  // Reset o primera ejecución: usar capital_eur del optimizer (ya en INIT_CAP)
+  if(totalValue <= 0) totalValue = INIT_CAP;
+
+  // ── 1. Normalizar allocs del nuevo CFG sobre el capital correcto ──
+  // Los pesos ya están normalizados en parseCloudCSV — recalcular alloc sobre totalValue
+  const totalWeight = Object.values(CFG).reduce((s, c) => s + (c.w || 0), 0) || 1;
+  Object.keys(CFG).forEach(k => {
+    CFG[k].alloc = totalValue * ((CFG[k].w || 0) / totalWeight);
+  });
+
+  // ── 2. Cerrar WebSocket ───────────────────────────────────────
   if(S.ws) { try { S.ws.close(); } catch(e){} S.ws = null; }
   clearTimeout(S.wsTimer);
 
-  // 2. Archivar trades actuales
+  // ── 3. Archivar trades anteriores ────────────────────────────
   S.archivedTrades = [...S.archivedTrades, ...S.trades];
   S.trades = [];
 
-  // 3. Destruir charts existentes
+  // ── 4. Generar SELL para monedas que salen del portfolio ──────
+  const now = new Date();
+  Object.values(prevAssets).forEach(a => {
+    if(CFG[a.key]) return;  // sigue en el portfolio → no vender
+    const p = prevPrices[a.key] || a.t0Price || 0;
+    if(a.qty > 0 && p > 0) {
+      const saleValue = a.qty * p;
+      const fee       = saleValue * COMMISSION;
+      S.trades.unshift({
+        id:    `${a.key}_exit_${Date.now()}`,
+        ts:    now, asset: a.key, type: 'SELL',
+        price: p, qty: a.qty, value: saleValue, fee,
+        pnl:   saleValue - a.activeVal - fee,
+        note:  `Rebalanceo: ${a.key} sale del portfolio`
+      });
+    }
+  });
+
+  // ── 5. Destruir charts existentes ────────────────────────────
   if(S.eqChart)   { S.eqChart.destroy();   S.eqChart   = null; }
   if(S.distChart) { S.distChart.destroy(); S.distChart = null; }
-  Object.values(S.assets).forEach(a => {
+  Object.values(prevAssets).forEach(a => {
     if(a.eqChart) { a.eqChart.destroy(); a.eqChart = null; }
   });
 
-  // 4. Resetear estado de assets y equity
-  S.assets    = {};
-  S.eqTimes   = []; S.eqBot = []; S.eqHold = []; S.eqBtc = []; S.btcHoldQty = 0;
-  S.t0Time    = null; S.t0Prices = {};
-  S.prices    = {}; S.prevPrices = {};
+  // ── 6. Resetear estado global de equity ──────────────────────
+  S.eqTimes = []; S.eqBot = []; S.eqHold = []; S.eqBtc = []; S.btcHoldQty = 0;
+  S.t0Time  = null; S.t0Prices = {};
+  S.prices  = Object.assign({}, prevPrices);  // conservar precios para que la UI no parpadee
+  S.prevPrices = {};
 
-  // 4b. Repoblar S.assets con el nuevo CFG antes de construir la UI
-  Object.keys(CFG).forEach(k => { S.assets[k] = makeAsset(k); });
+  // ── 7. Poblar S.assets con el nuevo CFG ──────────────────────
+  S.assets = {};
+  Object.keys(CFG).forEach(k => {
+    S.assets[k] = makeAsset(k);
+    // Restaurar posición si la moneda continúa en el portfolio
+    const prev = prevAssets[k];
+    if(prev && prev.t0Price > 0) {
+      const na       = S.assets[k];
+      na.qty         = prev.qty;
+      na.t0Price     = prev.t0Price;
+      na.pRef        = prev.pRef;
+      na.buyLevel    = prev.buyLevel;
+      na.sellLevel   = prev.sellLevel;
+      na.gridProfit  = prev.gridProfit;
+      na.tradeCount  = prev.tradeCount;
+      na.holdQty     = prev.holdQty;
+      na.reserveVal  = prev.reserveVal;
+      na.activeVal   = prev.qty * (prevPrices[k] || prev.t0Price);
+      na.targetValue = prev.targetValue;
+      na.eqTimes     = prev.eqTimes || [];
+      na.eqBot       = prev.eqBot   || [];
+      // Mantener t0Time si había activos continuos
+      if(!S.t0Time && prev.t0Price > 0) S.t0Time = S.t0Time || new Date();
+    }
+  });
 
-  // 5. Reconstruir DOM: tabs + vistas de activo + cfg rows
+  // ── 8. Reconstruir DOM ────────────────────────────────────────
   const tabBar = $id('tab-bar');
-  // Eliminar tabs de activos (mantener GLOBAL)
   [...tabBar.children].forEach(el => { if(el.id !== 'tab-GLOBAL') el.remove(); });
-  // Limpiar vistas de activos
   const av = $id('asset-views');
   if(av) av.innerHTML = '';
 
   buildAssetViews();
   buildCfgRows();
 
-  // 6. Re-inicializar charts
+  // ── 9. Re-inicializar charts ──────────────────────────────────
   initChart();
   initDistChart();
 
-  // 7. Reconectar WS con nuevos símbolos
+  // ── 10. Reconectar WS con nuevos símbolos ────────────────────
   connectWS();
 
-  // 8. Resetear tab activo
   switchTab('GLOBAL');
 
-  // Banner defensivo
   const banner = $id('defensive-banner');
   if(banner) banner.classList.toggle('hidden', !(S.cloudMeta && S.cloudMeta.defensive_mode));
 
   renderCloudMeta();
+  renderUI();
 }
 
 // ── Fetch principal: descarga CSV optimizer y aplica config ───
@@ -2980,8 +3043,9 @@ async function fetchCloudConfig() {
 
     const { meta, newCFG } = parseCloudCSV(await resp.text());
 
-    // Actualizar CFG y meta globales
-    CFG = newCFG;
+    // Actualizar CFG, capital y meta globales
+    CFG       = newCFG;
+    INIT_CAP  = meta.capital_eur;   // el capital real viene del optimizer
     S.cloudMeta   = meta;
     S.cloudSyncTs = Date.now();
 
