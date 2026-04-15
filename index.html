@@ -527,10 +527,15 @@
         </div>
         <div id="ledger-stats" class="flex gap-4 text-xs text-gray-500 pb-2 mb-1 border-b border-gray-800 flex-shrink-0"></div>
         <div class="grid text-[10px] text-gray-600 py-1 mb-1 border-b border-gray-800/60 flex-shrink-0"
-          style="grid-template-columns:18px 36px 52px 1fr 1fr 56px 52px 34px;gap:0 6px;align-items:center">
-          <span></span><span>ACTIVO</span><span>TIPO</span>
-          <span class="text-right">PRECIO</span><span class="text-right">CANTIDAD</span>
-          <span class="text-right">COMISIÓN</span><span class="text-right">PnL</span><span class="text-right">HORA</span>
+          style="grid-template-columns:14px auto auto minmax(80px,1.6fr) minmax(70px,1fr) auto auto auto;gap:0 6px;align-items:center">
+          <span></span>
+          <span class="whitespace-nowrap overflow-hidden">ACTIVO</span>
+          <span class="whitespace-nowrap overflow-hidden">TIPO</span>
+          <span class="text-right whitespace-nowrap overflow-hidden">PRECIO</span>
+          <span class="text-right whitespace-nowrap overflow-hidden">CANTIDAD</span>
+          <span class="text-right whitespace-nowrap overflow-hidden">FEE €</span>
+          <span class="text-right whitespace-nowrap overflow-hidden">PnL</span>
+          <span class="text-right whitespace-nowrap overflow-hidden">HORA</span>
         </div>
         <div id="ledger" class="overflow-y-auto flex-1 min-h-0 space-y-px text-xs" style="max-height:320px">
           <div class="text-gray-600 text-center py-6">Esperando datos de mercado…</div>
@@ -642,6 +647,7 @@ const S = {
   eqHold:      [],     // stored hold total values
   eqBtc:       [],     // stored BTC 100%-hold values
   btcHoldQty:  0,      // qty BTC si se hubiese invertido todo INIT_CAP en BTC al t0
+  btcT0Price:  0,      // precio BTC en t0 (independiente de si BTC es activo del modelo)
 
   optimizer:    null,
 
@@ -653,6 +659,10 @@ const S = {
   // Cloud optimizer config
   cloudMeta:    null,    // { timestamp, tier, capital_eur, top_n, defensive_mode }
   cloudSyncTs:  0,       // ms timestamp del último fetch de optimizer
+
+  // Optimizer config pendiente (se aplica solo al hacer RESET)
+  pendingCFG:   null,    // CFG del último ciclo del optimizer (sin aplicar)
+  pendingMeta:  null,    // meta del último ciclo del optimizer (sin aplicar)
 };
 
 // ================================================================
@@ -738,7 +748,10 @@ function setPRef(a, price) {
 //  WEBSOCKET
 // ================================================================
 function connectWS() {
-  const streams = Object.values(CFG).map(c=>c.sym.toLowerCase()+'@ticker').join('/');
+  const cfgStreams = Object.values(CFG).map(c=>c.sym.toLowerCase()+'@ticker');
+  // Siempre incluir BTCUSDT para el comparativo fijo vs. BTC
+  if(!cfgStreams.includes('btcusdt@ticker')) cfgStreams.push('btcusdt@ticker');
+  const streams = cfgStreams.join('/');
   const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
 
   if(S.ws){ try{S.ws.close()}catch(e){} }
@@ -757,8 +770,20 @@ function connectWS() {
     const d = msg.data;
     const sym = d.s;
     const price = parseFloat(d.c);
+    if(!isFinite(price) || price <= 0) return;
+
+    // Siempre actualizar precio BTC para comparativo fijo (aunque no sea activo del modelo)
+    if(sym === 'BTCUSDT') {
+      S.prices['BTC'] = price;
+      // Fijar precio t0 de BTC en el primer tick tras reset
+      if(S.t0Time && !S.btcT0Price) {
+        S.btcT0Price = price;
+        S.btcHoldQty = (INIT_CAP * (1 - COMMISSION)) / price;
+      }
+    }
+
     const key = Object.keys(CFG).find(k=>CFG[k].sym===sym);
-    if(!key || !isFinite(price) || price<=0) return;
+    if(!key) return;
 
     S.prevPrices[key] = S.prices[key] || price;
     S.prices[key] = price;
@@ -1161,12 +1186,12 @@ function initChart() {
     const now = Date.now();
     const maxAge = EQ_PERIODS['12m'];
 
-    // ── BTC 100%-Hold: calcula qty en t0 y valor actual ─────────
-    const btcAsset = S.assets['BTC'];
+    // ── BTC 100%-Hold: comparativo fijo, independiente de las monedas activas ──
     const btcPrice = S.prices['BTC'] || 0;
-    if(btcAsset && btcPrice && btcAsset.t0Price && !S.btcHoldQty) {
-      // Cantidad de BTC si se hubiese invertido todo INIT_CAP al precio t0
-      S.btcHoldQty = (INIT_CAP * (1 - COMMISSION)) / btcAsset.t0Price;
+    // Fallback: si BTC es un activo del modelo, usar su t0Price para inicializar
+    if(!S.btcT0Price && S.assets['BTC'] && S.assets['BTC'].t0Price) {
+      S.btcT0Price = S.assets['BTC'].t0Price;
+      S.btcHoldQty = (INIT_CAP * (1 - COMMISSION)) / S.btcT0Price;
     }
     const btcHoldVal = (S.btcHoldQty && btcPrice) ? S.btcHoldQty * btcPrice : 0;
 
@@ -1579,7 +1604,7 @@ function renderLedger() {
     const priceStr = t.price===1 ? '$1 USDC' : `$${pf(t.price)}`;
     html += `
     <div class="pl-1.5 py-0.5 rounded ${cls} grid items-center hover:bg-gray-800/30 transition"
-      style="grid-template-columns:18px 36px 52px 1fr 1fr 56px 52px 34px; gap:0 6px; min-height:22px">
+      style="grid-template-columns:14px auto auto minmax(80px,1.6fr) minmax(70px,1fr) auto auto auto; gap:0 6px; min-height:22px">
       <span class="flex items-center justify-center">${dot}</span>
       <span class="font-bold text-[11px]" style="color:${a?.col||'#94a3b8'}">${t.asset}</span>
       <span class="text-gray-400">${lbl}</span>
@@ -2367,15 +2392,42 @@ function switchTab(id) {
 //  RESET
 // ================================================================
 function doReset() {
-  const allReady = Object.keys(CFG).every(k=>S.prices[k]>0);
-  if(!allReady){
-    alert('Esperando precios en tiempo real. Intenta en unos segundos.');
+  // ── 1. Obtener configuración del optimizer (pendingCFG) ─────────
+  const newCFG  = S.pendingCFG  || CFG;
+  const newMeta = S.pendingMeta || { capital_eur: INIT_CAP };
+  const newCoins = Object.keys(newCFG);
+
+  if(newCoins.length === 0){
+    alert('No hay configuración del optimizer. Espera a que se cargue el cloud config.');
     return;
   }
-  if(!confirm('¿Resetear t₀ a precios actuales?\nSe limpiarán trades e historial del equity curve.')) return;
 
-  // Clear global equity chart + stored series
-  S.eqTimes = []; S.eqBot = []; S.eqHold = []; S.eqBtc = []; S.btcHoldQty = 0;
+  // Verificar precios disponibles para todas las monedas del nuevo modelo
+  const waitingFor = newCoins.filter(k => !(S.prices[k] > 0));
+  if(waitingFor.length > 0){
+    alert(`Esperando precios en tiempo real para: ${waitingFor.join(', ')}.\nIntenta en unos segundos.`);
+    return;
+  }
+
+  const ts = newMeta.timestamp
+    ? new Date(newMeta.timestamp).toLocaleString()
+    : 'desconocido';
+  const capStr = (newMeta.capital_eur || INIT_CAP).toLocaleString('es-ES', {style:'currency', currency:'EUR'});
+  if(!confirm(
+    `¿Resetear modelo a configuración del optimizer?\n\n` +
+    `Timestamp: ${ts}\n` +
+    `Capital: ${capStr}\n` +
+    `Monedas: ${newCoins.join(', ')}\n\n` +
+    `Se limpiarán todos los trades e historial del equity.`
+  )) return;
+
+  // ── 2. Aplicar nueva configuración ──────────────────────────────
+  INIT_CAP = newMeta.capital_eur || INIT_CAP;
+  CFG      = newCFG;
+
+  // ── 3. Limpiar equity global ─────────────────────────────────────
+  S.eqTimes = []; S.eqBot = []; S.eqHold = []; S.eqBtc = [];
+  S.btcHoldQty = 0; S.btcT0Price = 0;   // se recalculan en el primer tick BTC
   if(S.eqChart){
     S.eqChart.data.labels = [];
     S.eqChart.data.datasets[0].data = [];
@@ -2383,61 +2435,79 @@ function doReset() {
     if(S.eqChart.data.datasets[2]) S.eqChart.data.datasets[2].data = [];
     S.eqChart.update('none');
   }
-  // Clear per-asset equity charts + stored series
+
+  // ── 4. Destruir assets anteriores y crear los nuevos ────────────
+  // Limpiar charts de assets anteriores
   Object.values(S.assets).forEach(a => {
-    a.eqTimes = []; a.eqBot = []; a.eqHold = [];
-    if(!a.eqChart) return;
-    a.eqChart.data.labels = [];
-    a.eqChart.data.datasets[0].data = [];
-    a.eqChart.data.datasets[1].data = [];
-    a.eqChart.update('none');
+    if(a.eqChart) { try { a.eqChart.destroy(); } catch(e){} }
   });
 
-  S.trades  = [];
-  S.t0Time  = new Date();
+  S.assets   = {};
+  S.trades   = [];
+  S.t0Time   = new Date();
   S.t0Prices = {};
 
-  Object.values(S.assets).forEach(a => {
-    const p = S.prices[a.key];
+  // Crear assets para las monedas del nuevo modelo
+  newCoins.forEach(k => { S.assets[k] = makeAsset(k); });
+
+  // Reconstruir tabs y vistas con las nuevas monedas
+  buildAssetViews();
+  buildCfgRows();
+  initChart();
+  initDistChart();
+
+  // ── 5. Inicializar posiciones con capital_eur × weight ───────────
+  const nowR = new Date();
+  newCoins.forEach(k => {
+    const a = S.assets[k];
+    if(!a) return;
+    const p = S.prices[k];
     if(!p) return;
 
-    S.t0Prices[a.key] = p;
+    // Calcular alloc desde capital_eur × weight (ya normalizado en parseCloudCSV)
+    const alloc = INIT_CAP * (CFG[k].w || (1 / newCoins.length));
+    a.alloc = alloc;
+    CFG[k].alloc = alloc;
+
+    S.t0Prices[k] = p;
     a.t0Price = p;
-    setPRef(a, p);     // ★ reset pRef y niveles estáticos al precio actual
+
+    // Usar pRefCloud si existe, sino precio actual
+    const pRefInit = (CFG[k].pRefCloud > 0) ? CFG[k].pRefCloud : p;
+    setPRef(a, pRefInit);
     a.gridProfit = 0;
     a.tradeCount = 0;
 
-    const activeCapital  = a.alloc * (1 - a.reserve);
-    const reserveCapital = a.alloc * a.reserve;
+    const activeCapital  = alloc * (1 - a.reserve);
+    const reserveCapital = alloc * a.reserve;
 
-    const fee        = activeCapital  * COMMISSION;   // EUR → crypto
-    const reserveFee = reserveCapital * COMMISSION;   // EUR → USDC
+    const fee        = activeCapital  * COMMISSION;
+    const reserveFee = reserveCapital * COMMISSION;
     const net        = activeCapital - fee;
 
-    a.qty        = net / p;
-    a.activeVal  = a.qty * p;
-    a.reserveVal = reserveCapital - reserveFee;       // ← comisión aplicada
+    a.qty         = net / p;
+    a.activeVal   = a.qty * p;
+    a.reserveVal  = reserveCapital - reserveFee;
     a.targetValue = a.activeVal;
 
     // Hold: asignación completa sin reserva
-    const holdFeeR = a.alloc * COMMISSION;
-    a.holdQty = (a.alloc - holdFeeR) / p;
+    const holdFeeR = alloc * COMMISSION;
+    a.holdQty = (alloc - holdFeeR) / p;
 
-    const nowR = new Date();
     S.trades.push({
-      id:`${a.key}_reset_${Date.now()}`, ts:nowR, asset:a.key, type:'INIT',
+      id:`${k}_reset_${Date.now()}`, ts:nowR, asset:k, type:'INIT',
       price:p, qty:a.qty, value:activeCapital, fee, pnl:-fee,
-      note:`Reset t₀ — compra ${a.key}`
+      note:`Reset t₀ — compra ${k} (${(CFG[k].w*100).toFixed(1)}% de ${capStr})`
     });
     S.trades.push({
-      id:`${a.key}_usdc_reset_${Date.now()}`, ts:nowR, asset:a.key, type:'INIT',
+      id:`${k}_usdc_reset_${Date.now()}`, ts:nowR, asset:k, type:'INIT',
       price:1, qty:a.reserveVal, value:reserveCapital, fee:reserveFee, pnl:-reserveFee,
-      note:`Reset t₀ — compra reserva USDC`
+      note:`Reset t₀ — reserva USDC ${k}`
     });
   });
 
   renderUI();
-  syncToCloud(true);   // Forzar sync inmediato tras reset
+  syncToCloud(true);   // Persistir estado inicial en Google Sheets
 }
 
 // ================================================================
@@ -2534,6 +2604,13 @@ function applySheetState(data) {
     const n = f => parseFloat(data[`${k}_${f}`]) || 0;
     const i = f => parseInt(data[`${k}_${f}`])   || 0;
 
+    // Restaurar parámetros CFG desde estado guardado (para coherencia multi-dispositivo)
+    if(n('weight') > 0)  CFG[k].w      = n('weight');
+    if(n('reserve') > 0) CFG[k].res    = n('reserve');
+    if(n('profit') > 0)  CFG[k].pft    = n('profit');
+    if(n('alloc') > 0)   CFG[k].alloc  = n('alloc');
+
+    // Restaurar estado runtime del asset
     a.t0Price     = n('t0Price');
     a.qty         = n('qty');
     a.pRef        = n('pRef');
@@ -2543,9 +2620,10 @@ function applySheetState(data) {
     a.holdQty     = n('holdQty');
     a.gridProfit  = n('gridProfit');
     a.tradeCount  = i('tradeCount');
-    a.weight      = n('weight')  || a.weight;
-    a.reserve     = n('reserve') || a.reserve;
-    a.profit      = n('profit')  || a.profit;
+    a.weight      = CFG[k].w   || a.weight;
+    a.reserve     = CFG[k].res || a.reserve;
+    a.profit      = CFG[k].pft || a.profit;
+    a.alloc       = CFG[k].alloc || a.alloc;
 
     // Recalcular niveles desde pRef guardado
     a.buyLevel  = a.pRef * (1 - a.profit);
@@ -2616,6 +2694,9 @@ async function backfillHistory(fromMs) {
 // ── Carga estado desde Google Sheets ─────────────────────────
 // Fase A (pre-boot):  detecta monedas → actualiza CFG → guarda en _pendingSheetData
 // Fase B (post-boot): aplica estado directamente a S.assets ya construidos
+// ── Lee el estado guardado del modelo desde Google Sheets ────────
+// Esta función NUNCA resetea el modelo — solo restaura.
+// El modelo solo se inicializa desde doReset().
 async function loadFromSheet() {
   if(!GSHEET_URL) return;
   setSyncStatus('loading');
@@ -2628,44 +2709,38 @@ async function loadFromSheet() {
     const data = parseSheetCSV(text);
 
     const keys = Object.keys(data);
-    console.log('[loadFromSheet] filas recibidas:', keys.length, '| primeras claves:', keys.slice(0,5));
+    console.log('[loadFromSheet] claves:', keys.length, '| muestra:', keys.slice(0,6));
 
-    if(!_bootComplete) {
-      // ── FASE A: pre-boot ──────────────────────────────────────
-      // Prioridad 1: intentar leer como formato optimizer (columna 'asset')
-      let usedOptimizer = false;
-      try {
-        const { meta, newCFG } = parseCloudCSV(text);
-        CFG           = newCFG;
-        S.cloudMeta   = meta;
-        S.cloudSyncTs = Date.now();
-        console.log('[loadFromSheet] formato optimizer detectado:', Object.keys(newCFG).join(', '));
-        usedOptimizer    = true;
-        _pendingSheetData = null;  // no hay estado que aplicar en esta pestaña
-      } catch(_) { /* no es formato optimizer */ }
-
-      // Prioridad 2: leer coinList o _t0Price del formato key-value de estado
-      if(!usedOptimizer) {
-        const sheetCoins = extractCoinsFromSheetData(data);
-        if(sheetCoins.length > 0) {
-          console.log('[loadFromSheet] monedas detectadas (key-value):', sheetCoins.join(', '));
-          CFG = buildCFGFromSheetCoins(sheetCoins, data);
-        } else {
-          console.log('[loadFromSheet] sin monedas en hoja → CFG por defecto');
-        }
-        _pendingSheetData = data;
-      }
-      return;
-    }
-
-    // ── FASE B: post-boot (recargas periódicas / reintento) ──────
+    // Detectar si hay estado guardado (modelo iniciado en alguna sesión anterior)
     const hasState = data.lastSync ||
       keys.some(k => k.endsWith('_t0Price') && parseFloat(data[k]) > 0);
+
     if(!hasState) {
-      console.warn('[loadFromSheet] Hoja sin datos de estado');
+      console.log('[loadFromSheet] Sin estado guardado — modelo no iniciado');
       setSyncStatus('idle');
+      // Guardar null para que boot sepa que no hay estado
+      _pendingSheetData = null;
       return;
     }
+
+    // Hay estado — reconstruir CFG desde coinList guardado
+    if(data.coinList) {
+      const activeCoins = data.coinList.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      console.log('[loadFromSheet] monedas activas del estado:', activeCoins.join(', '));
+      if(activeCoins.length > 0) {
+        CFG = buildCFGFromSheetCoins(activeCoins, data);
+        // Ajustar capital si está guardado
+        if(data.capital_eur) INIT_CAP = parseFloat(data.capital_eur) || INIT_CAP;
+      }
+    }
+
+    if(!_bootComplete) {
+      // Pre-boot: guardar para aplicar después de buildAssetViews
+      _pendingSheetData = data;
+      return;
+    }
+
+    // Post-boot: aplicar directamente
     applySheetState(data);
     const gap = Date.now() - S.lastSyncTs;
     if(S.lastSyncTs > 0 && gap > BACKFILL_GAP) {
@@ -2710,9 +2785,10 @@ function applyPendingSheetState() {
 // ── Construye el payload del estado actual ───────────────────
 function buildSyncPayload() {
   const payload = {
-    lastSync: Date.now(),
-    t0Time:   S.t0Time ? S.t0Time.getTime() : 0,
-    coinList: Object.keys(CFG).join(','),   // lista de monedas activas para reconstruir CFG al arrancar
+    lastSync:    Date.now(),
+    t0Time:      S.t0Time ? S.t0Time.getTime() : 0,
+    coinList:    Object.keys(CFG).join(','),  // monedas activas del modelo
+    capital_eur: INIT_CAP,                   // capital total del modelo para restaurar en carga
   };
   Object.values(S.assets).forEach(a => {
     const k = a.key;
@@ -2987,7 +3063,8 @@ function rebuildFromCloudConfig() {
   });
 
   // ── 6. Resetear estado global de equity ──────────────────────
-  S.eqTimes = []; S.eqBot = []; S.eqHold = []; S.eqBtc = []; S.btcHoldQty = 0;
+  S.eqTimes = []; S.eqBot = []; S.eqHold = []; S.eqBtc = [];
+  S.btcHoldQty = 0; S.btcT0Price = 0;
   S.t0Time  = null; S.t0Prices = {};
   S.prices  = Object.assign({}, prevPrices);  // conservar precios para que la UI no parpadee
   S.prevPrices = {};
@@ -3059,15 +3136,19 @@ async function fetchCloudConfig() {
 
     const { meta, newCFG } = parseCloudCSV(await resp.text());
 
-    // Actualizar CFG, capital y meta globales
-    CFG       = newCFG;
-    INIT_CAP  = meta.capital_eur;   // el capital real viene del optimizer
+    // Actualizar config del optimizer (NO resetea el modelo — solo RESET lo hace)
+    S.pendingCFG  = newCFG;         // guardado para uso en doReset()
+    S.pendingMeta = meta;           // meta del ciclo más reciente
     S.cloudMeta   = meta;
     S.cloudSyncTs = Date.now();
 
-    // Reconstruir simulación con nuevo CFG
-    rebuildFromCloudConfig();
+    // Si no hay modelo activo aún, aplicar como CFG de referencia
+    if(!S.t0Time) {
+      CFG      = newCFG;
+      INIT_CAP = meta.capital_eur;
+    }
 
+    renderCloudMeta();
     if(btn) { btn.textContent = '✓ Sync'; btn.disabled = false; setTimeout(()=>{ btn.textContent='☁ Sync'; },3000); }
 
   } catch(e) {
@@ -3084,19 +3165,22 @@ async function fetchCloudConfig() {
 //  BOOT
 // ================================================================
 async function boot() {
-  // 0. Banner de protocolo local
+  // 0. Banner protocolo local
   if(window.location.protocol === 'file:') {
     const b = $id('file-protocol-banner');
     if(b) b.classList.remove('hidden');
   }
 
-  // 1. Leer hoja de estado:
-  //    · detecta qué monedas están activas  → actualiza CFG dinámicamente
-  //    · guarda datos en _pendingSheetData  → se aplicarán en paso 3
+  // 1. Cargar config del optimizer (actualiza CFG/meta/INIT_CAP si no hay modelo activo)
+  //    NO resetea el modelo — solo guarda pendingCFG y muestra meta del último ciclo
+  await fetchCloudConfig().catch(() => {});
+
+  // 2. Cargar estado guardado del modelo (hoja de estado, formato key-value)
+  //    Si hay estado → reconstruye CFG desde coinList guardado
+  //    Si no hay estado → _pendingSheetData = null (modelo no iniciado)
   await loadFromSheet();
 
-  // 2. Construir UI con el CFG resultante (hoja o fallback estático)
-  // Sincronizar S.assets con el CFG actual (puede haber cambiado en loadFromSheet)
+  // 3. Sincronizar S.assets con el CFG actual y construir UI
   Object.keys(S.assets).forEach(k => { if(!CFG[k]) delete S.assets[k]; });
   Object.keys(CFG).forEach(k => { if(!S.assets[k]) S.assets[k] = makeAsset(k); });
   buildAssetViews();
@@ -3104,20 +3188,17 @@ async function boot() {
   initChart();
   initDistChart();
 
-  // 3. Aplicar estado guardado ahora que S.assets está poblado
+  // 4. Aplicar estado guardado (posiciones, pRef, gridProfit…) + backfill si hay gap
   applyPendingSheetState();
 
-  // 4. Conectar WebSocket de precios
+  // 5. Conectar WebSocket de precios
   connectWS();
-
-  // 5. Intentar config del optimizer (no bloquea el arranque)
-  fetchCloudConfig().catch(() => {});
 
   if(window.lucide) lucide.createIcons();
 
-  _bootComplete = true;  // a partir de aquí loadFromSheet usa Fase B
+  _bootComplete = true;
 
-  // 6. Intervals
+  // 6. Intervals periódicos
   setInterval(renderUI, 2000);
   setInterval(renderCloudMeta, 60000);
   setInterval(fetchCloudConfig, CLOUD_SYNC_INTERVAL_MS);
