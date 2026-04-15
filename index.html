@@ -588,7 +588,7 @@
 // ================================================================
 //  CONSTANTS & CONFIG
 // ================================================================
-const COMMISSION  = 0.0005;   // 0.05%
+const COMMISSION  = 0.001;    // 0.10% por operación
 let INIT_CAP      = 1000;     // € — se sobreescribe con capital_eur del optimizer
 const EQ_INTERVAL   = 5000;    // equity sample ms
 const MAX_EQ_PTS    = 300;     // chart points (legacy)
@@ -688,6 +688,7 @@ function makeAsset(key) {
 
     gridProfit: 0,    // realized grid profit (net)
     tradeCount: 0,
+    accFee:     0,    // comisiones acumuladas totales (persiste entre sesiones via sync)
 
     holdQty: 0,       // fixed buy-and-hold qty
 
@@ -899,6 +900,7 @@ function runGrid(key, price) {
     a.activeVal   = a.qty * executedPrice;
     a.gridProfit += Math.max(0, netProfit);
     a.tradeCount++;
+    a.accFee     += fee;
 
     // ★ Nuevo pRef = precio exacto de la orden ejecutada
     a.pRef      = executedPrice;
@@ -934,6 +936,7 @@ function runGrid(key, price) {
     a.reserveVal -= maxBuy;
     a.activeVal   = a.qty * executedPrice;
     a.tradeCount++;
+    a.accFee     += fee;
 
     // ★ Nuevo pRef = precio exacto de la orden ejecutada
     a.pRef      = executedPrice;
@@ -1372,9 +1375,11 @@ function renderUI() {
   setHTML('kpi-total-date', `<span>desde</span><span>${t0Str}</span>`); // justify-end in HTML
 
   $id('kpi-gp').textContent     = `€${f2(gridProfit)}`;
-  const gridTrades = S.trades.filter(t => t.type === 'BUY' || t.type === 'SELL').length;
+  // Contador: suma de tradeCount de todos los activos (persiste entre sesiones)
+  const gridTrades = Object.values(S.assets).reduce((s, a) => s + (a.tradeCount || 0), 0);
   $id('kpi-trades').textContent = `${gridTrades} trades`;
-  const totalFees = S.trades.reduce((s, t) => s + (t.fee || 0), 0);
+  // Comisiones: suma de accFee acumuladas (persiste entre sesiones via sync)
+  const totalFees = Object.values(S.assets).reduce((s, a) => s + (a.accFee || 0), 0);
   const feesEl = $id('kpi-fees');
   if(feesEl) feesEl.textContent = `€${f2(totalFees)}`;
 
@@ -1565,10 +1570,10 @@ function renderLedger() {
   S.trades.forEach(t=>{
     totalFees += t.fee||0;
     netPnl    += t.pnl||0;
-    if(t.type==='BUY')   nBuy++;
+    if(t.type==='BUY')        nBuy++;
     else if(t.type==='SELL')  nSell++;
     else if(t.type==='INIT')  nInit++;
-    else nReb++;
+    else if(t.type!=='HIST')  nReb++;  // HIST no cuenta en ningún filtro
   });
   const { gridProfit } = calcPortfolio();
   setHTML('ledger-gp-hdr', `Grid: €${f2(gridProfit)}`);
@@ -1582,7 +1587,7 @@ function renderLedger() {
 
   const typeMap = {
     INIT:'INICIAL', BUY:'COMPRA', SELL:'VENTA',
-    BUYREB:'REBAL+', SELLREB:'REBAL-'
+    BUYREB:'REBAL+', SELLREB:'REBAL-', HIST:'HISTÓRICO'
   };
   const _badge = (clr) => `<span style="display:inline-block;width:7px;height:7px;border-radius:2px;border:1px solid ${clr};background:transparent;vertical-align:middle;flex-shrink:0"></span>`;
   const dotMap  = {
@@ -1591,8 +1596,9 @@ function renderLedger() {
     SELL:    _badge('#c87070'),
     BUYREB:  _badge('#a07830'),
     SELLREB: _badge('#a07830'),
+    HIST:    _badge('#6366f1'),
   };
-  const clsMap  = { INIT:'l-init', BUY:'l-buy', SELL:'l-sell', BUYREB:'l-reb', SELLREB:'l-reb' };
+  const clsMap  = { INIT:'l-init', BUY:'l-buy', SELL:'l-sell', BUYREB:'l-reb', SELLREB:'l-reb', HIST:'l-init' };
 
   // Single-line ledger: one row per operation, all fields visible
   let html = '';
@@ -2248,13 +2254,14 @@ function execRebalance(k, prevVal, newVal, type) {
   setPRef(a, p);
 
   const pnl = -fee;
+  a.accFee += fee;
+  a.tradeCount++;
   S.trades.unshift({
     id:`${k}_reb_${Date.now()}`, ts:new Date(), asset:k,
     type: isBuy ? 'BUYREB' : 'SELLREB',
     price:p, qty, value:Math.abs(delta), fee, pnl,
     note:`Rebalanceo ${type} | nuevo pRef $${pf(p)}`
   });
-  a.tradeCount++;
 }
 
 // ================================================================
@@ -2477,6 +2484,7 @@ function doReset() {
     setPRef(a, pRefInit);
     a.gridProfit = 0;
     a.tradeCount = 0;
+    a.accFee     = 0;
 
     const activeCapital  = alloc * (1 - a.reserve);
     const reserveCapital = alloc * a.reserve;
@@ -2594,8 +2602,9 @@ function parseSheetCSV(csv) {
 
 // ── Aplica el estado del sheet al objeto S ───────────────────
 function applySheetState(data) {
-  if(data.t0Time && parseInt(data.t0Time) > 0)
-    S.t0Time = new Date(parseInt(data.t0Time));
+  // Parsear timestamps como UTC (el sheet usa Zulu)
+  const t0Ms = parseSheetTimestamp(data.t0Time);
+  if(t0Ms > 0) S.t0Time = new Date(t0Ms);
 
   Object.keys(CFG).forEach(k => {
     const a = S.assets[k];
@@ -2620,6 +2629,7 @@ function applySheetState(data) {
     a.holdQty     = n('holdQty');
     a.gridProfit  = n('gridProfit');
     a.tradeCount  = i('tradeCount');
+    a.accFee      = n('accFee')  || 0;
     a.weight      = CFG[k].w   || a.weight;
     a.reserve     = CFG[k].res || a.reserve;
     a.profit      = CFG[k].pft || a.profit;
@@ -2630,9 +2640,40 @@ function applySheetState(data) {
     a.sellLevel = a.pRef * (1 + a.profit);
 
     S.t0Prices[k] = a.t0Price;
+
+    // Entrada HIST en el ledger: resume el historial previo a esta sesión
+    if(a.tradeCount > 0 || a.gridProfit > 0) {
+      S.trades.push({
+        id:    `${k}_hist_${t0Ms || Date.now()}`,
+        ts:    S.t0Time || new Date(),
+        asset: k,
+        type:  'HIST',
+        price: a.t0Price || 0,
+        qty:   a.tradeCount,
+        value: a.gridProfit,
+        fee:   a.accFee,
+        pnl:   a.gridProfit,
+        note:  `${a.tradeCount} ops históricas restauradas`
+      });
+    }
   });
 
-  S.lastSyncTs = parseInt(data.lastSync) || 0;
+  S.lastSyncTs = parseSheetTimestamp(data.lastSync);
+}
+
+// ── Parsea timestamps del sheet (Zulu/UTC) ───────────────────
+// Google Sheets / Make.com puede enviar Unix-ms (número) o cadena ISO (con o sin TZ).
+// Siempre tratamos cadenas sin TZ como UTC para sincronizar con las velas de Binance.
+function parseSheetTimestamp(raw) {
+  if(!raw) return 0;
+  const n = Number(raw);
+  if(!isNaN(n) && n > 1e12) return n;            // ya es Unix ms (13 dígitos)
+  const str = raw.toString().trim();
+  // Si no hay indicador de zona horaria, asumir UTC (Zulu)
+  const hastz = /Z$|[+-]\d{2}:?\d{2}$/.test(str);
+  const utcStr = hastz ? str : str.replace(' ', 'T') + 'Z';
+  const d = new Date(utcStr);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
 // ── Descarga velas de Binance para backfill ──────────────────
@@ -2803,6 +2844,7 @@ function buildSyncPayload() {
     payload[`${k}_holdQty`]     = a.holdQty;
     payload[`${k}_gridProfit`]  = a.gridProfit;
     payload[`${k}_tradeCount`]  = a.tradeCount;
+    payload[`${k}_accFee`]      = a.accFee || 0;
     payload[`${k}_weight`]      = a.weight;
     payload[`${k}_reserve`]     = a.reserve;
     payload[`${k}_profit`]      = a.profit;
@@ -2993,7 +3035,7 @@ function parseCloudCSV(csv) {
       sym,
       w:         weight,
       res:       parseFloat(r.reserve)         || 0.40,
-      pft:       parseFloat(r.profit_per_grid) || parseFloat(r.profit) || 0.006,
+      pft:       parseFloat(r.profit_per_grid) || parseFloat(r.profit) || 0.006,  // ← valor decimal directo (ej: 0.006 = 0.6%); NO dividir ni multiplicar por 100
       col:       ASSET_COLORS[key]             || '#94a3b8',
       alloc:     meta.capital_eur * weight,    // capital real definido por el optimizer
       pRefCloud: parseFloat(r.price_ref)       || 0,
