@@ -600,7 +600,7 @@ const BACKFILL_LIMIT = 1000;   // max velas por petición a Binance
 const BACKFILL_GAP   = 120000; // ms mínimo de gap para activar backfill (2 min)
 
 // ── Cloud Optimizer Config ──────────────────────────────────────
-const SHEETS_CSV_URL        = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSHYyD0V-4kaMF7Gv5S5vtSnN8y5DLqfD3_iPd1eX8vV1rSZtGJiV64psFjmORhtA/pub?output=csv';
+const SHEETS_CSV_URL        = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSHYyD0V-4kaMF7Gv5S5vtSnN8y5DLqfD3_iPd1eX8vV1rSZtGJiV64psFjmORhtA/pub?gid=1451413997&single=true&output=csv';
 const CLOUD_SYNC_INTERVAL_MS = 4 * 60 * 60 * 1000;  // re-fetch cada 4h
 const ASSET_COLORS = {
   BTC:'#f7931a', ETH:'#627eea', SOL:'#9945ff', XRP:'#00aae4', ONDO:'#3b82f6',
@@ -791,7 +791,9 @@ function initAsset(key, price) {
   if(a.t0Price > 0) return;
 
   a.t0Price = price;
-  setPRef(a, price);            // ★ fija pRef y calcula niveles estáticos
+  // Usar price_ref del optimizer si está disponible, si no el precio actual del mercado
+  const pRefInit = (CFG[key] && CFG[key].pRefCloud > 0) ? CFG[key].pRefCloud : price;
+  setPRef(a, pRefInit);         // ★ fija pRef y calcula niveles estáticos
 
   const activeCapital  = a.alloc * (1 - a.reserve);
   const reserveCapital = a.alloc * a.reserve;
@@ -2442,6 +2444,45 @@ function doReset() {
 //  CLOUD SYNC — Google Sheets + Make.com Webhook
 // ================================================================
 
+// ── Variables de control de arranque ────────────────────────
+let _pendingSheetData = null;   // datos de hoja guardados hasta que S.assets esté listo
+let _bootComplete     = false;  // true tras el primer boot()
+
+// ── Detecta qué monedas están definidas en los datos del sheet ─
+function extractCoinsFromSheetData(data) {
+  // Prioridad 1: clave explícita "coinList" → "BTC,ETH,SOL"
+  if(data.coinList) {
+    return data.coinList.split(',')
+      .map(s => s.trim().toUpperCase())
+      .filter(s => s.length >= 2 && s.length <= 8);
+  }
+  // Prioridad 2: inferir de claves {SYM}_t0Price
+  return Object.keys(data)
+    .filter(k => k.endsWith('_t0Price'))
+    .map(k => k.replace('_t0Price', ''))
+    .filter(sym => sym.length >= 2 && sym.length <= 8);
+}
+
+// ── Construye CFG dinámico a partir de la lista de monedas ────
+function buildCFGFromSheetCoins(coins, data) {
+  const newCFG = {};
+  coins.forEach(sym => {
+    const base = CFG[sym] || {};
+    // Leer parámetros del sheet (nombres guardados por buildSyncPayload)
+    const alloc = parseFloat(data[`${sym}_alloc`])   || base.alloc || Math.round(INIT_CAP / coins.length);
+    const pft   = parseFloat(data[`${sym}_pft`])     || parseFloat(data[`${sym}_profit`]) || base.pft || 0.01;
+    const res   = parseFloat(data[`${sym}_res`])     || parseFloat(data[`${sym}_reserve`])|| base.res || 0.50;
+    const w     = parseFloat(data[`${sym}_w`])       || parseFloat(data[`${sym}_weight`]) || base.w   || +(1/coins.length).toFixed(4);
+    newCFG[sym] = {
+      sym:   `${sym}USDT`,
+      w, res, pft,
+      col:   ASSET_COLORS[sym] || base.col || '#888888',
+      alloc,
+    };
+  });
+  return newCFG;
+}
+
 // ── Indicador visual ──────────────────────────────────────────
 const SYNC_UI = {
   idle:     { dot:'bg-gray-700',                         lbl:'Cloud: —' },
@@ -2572,7 +2613,9 @@ async function backfillHistory(fromMs) {
   }
 }
 
-// ── Carga estado inicial desde Google Sheets ─────────────────
+// ── Carga estado desde Google Sheets ─────────────────────────
+// Fase A (pre-boot):  detecta monedas → actualiza CFG → guarda en _pendingSheetData
+// Fase B (post-boot): aplica estado directamente a S.assets ya construidos
 async function loadFromSheet() {
   if(!GSHEET_URL) return;
   setSyncStatus('loading');
@@ -2584,34 +2627,83 @@ async function loadFromSheet() {
     const text = await resp.text();
     const data = parseSheetCSV(text);
 
-    // Debug: mostrar claves encontradas en consola
     const keys = Object.keys(data);
     console.log('[loadFromSheet] filas recibidas:', keys.length, '| primeras claves:', keys.slice(0,5));
 
-    if(!data.lastSync && !data.BTC_t0Price) {
-      // Hoja vacía o sin estado guardado — arranque normal
-      console.warn('[loadFromSheet] Hoja sin datos de estado (sin lastSync ni BTC_t0Price)');
-      setSyncStatus('idle');
+    if(!_bootComplete) {
+      // ── FASE A: pre-boot ──────────────────────────────────────
+      // Prioridad 1: intentar leer como formato optimizer (columna 'asset')
+      let usedOptimizer = false;
+      try {
+        const { meta, newCFG } = parseCloudCSV(text);
+        CFG           = newCFG;
+        S.cloudMeta   = meta;
+        S.cloudSyncTs = Date.now();
+        console.log('[loadFromSheet] formato optimizer detectado:', Object.keys(newCFG).join(', '));
+        usedOptimizer    = true;
+        _pendingSheetData = null;  // no hay estado que aplicar en esta pestaña
+      } catch(_) { /* no es formato optimizer */ }
+
+      // Prioridad 2: leer coinList o _t0Price del formato key-value de estado
+      if(!usedOptimizer) {
+        const sheetCoins = extractCoinsFromSheetData(data);
+        if(sheetCoins.length > 0) {
+          console.log('[loadFromSheet] monedas detectadas (key-value):', sheetCoins.join(', '));
+          CFG = buildCFGFromSheetCoins(sheetCoins, data);
+        } else {
+          console.log('[loadFromSheet] sin monedas en hoja → CFG por defecto');
+        }
+        _pendingSheetData = data;
+      }
       return;
     }
 
+    // ── FASE B: post-boot (recargas periódicas / reintento) ──────
+    const hasState = data.lastSync ||
+      keys.some(k => k.endsWith('_t0Price') && parseFloat(data[k]) > 0);
+    if(!hasState) {
+      console.warn('[loadFromSheet] Hoja sin datos de estado');
+      setSyncStatus('idle');
+      return;
+    }
     applySheetState(data);
-
-    // Comprobar gap: si hay más de BACKFILL_GAP ms sin datos → backfill
     const gap = Date.now() - S.lastSyncTs;
     if(S.lastSyncTs > 0 && gap > BACKFILL_GAP) {
       await backfillHistory(S.lastSyncTs);
     } else {
       setSyncStatus('ok');
     }
-
     renderUI();
 
   } catch(e) {
     console.error('[loadFromSheet] error:', e.message);
     setSyncStatus('error', e.message.slice(0, 40));
-    // Reintento automático en 30s
     setTimeout(loadFromSheet, 30000);
+  }
+}
+
+// ── Fase 2 del arranque: aplica estado una vez S.assets está listo ─
+function applyPendingSheetState() {
+  const data = _pendingSheetData;
+  _pendingSheetData = null;
+  if(!data) { setSyncStatus('idle'); return; }
+
+  const hasState = data.lastSync ||
+    Object.keys(data).some(k => k.endsWith('_t0Price') && parseFloat(data[k]) > 0);
+
+  if(!hasState) {
+    console.warn('[applyPendingSheetState] Sin estado guardado — arranque en frío');
+    setSyncStatus('idle');
+    return;
+  }
+
+  applySheetState(data);
+  const gap = Date.now() - S.lastSyncTs;
+  if(S.lastSyncTs > 0 && gap > BACKFILL_GAP) {
+    backfillHistory(S.lastSyncTs).then(() => renderUI());
+  } else {
+    setSyncStatus('ok');
+    renderUI();
   }
 }
 
@@ -2620,9 +2712,12 @@ function buildSyncPayload() {
   const payload = {
     lastSync: Date.now(),
     t0Time:   S.t0Time ? S.t0Time.getTime() : 0,
+    coinList: Object.keys(CFG).join(','),   // lista de monedas activas para reconstruir CFG al arrancar
   };
   Object.values(S.assets).forEach(a => {
     const k = a.key;
+    const c = CFG[k] || {};
+    // Estado runtime
     payload[`${k}_qty`]         = a.qty;
     payload[`${k}_pRef`]        = a.pRef;
     payload[`${k}_reserveVal`]  = a.reserveVal;
@@ -2635,6 +2730,11 @@ function buildSyncPayload() {
     payload[`${k}_weight`]      = a.weight;
     payload[`${k}_reserve`]     = a.reserve;
     payload[`${k}_profit`]      = a.profit;
+    // Parámetros CFG (para reconstruir buildCFGFromSheetCoins al arrancar)
+    payload[`${k}_alloc`]       = c.alloc  || a.targetValue || 0;
+    payload[`${k}_pft`]         = c.pft    || a.profit      || 0;
+    payload[`${k}_res`]         = c.res    || a.reserve     || 0;
+    payload[`${k}_w`]           = c.w      || a.weight      || 0;
   });
   return payload;
 }
@@ -2756,27 +2856,33 @@ function renderCloudMeta() {
 
 // ── Parser CSV del optimizer ─────────────────────────────────
 function parseCloudCSV(csv) {
-  const lines  = csv.trim().split('\n').map(l => l.replace(/\r/g,''));
+  // Eliminar BOM (\uFEFF) que Google Sheets añade a veces al exportar CSV
+  const clean  = csv.replace(/^\uFEFF/, '').trim();
+  const lines  = clean.split('\n').map(l => l.replace(/\r/g,''));
   if(lines.length < 2) throw new Error('CSV vacío o sin datos');
 
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
-  const idx     = h => headers.indexOf(h);
+  // Parsear headers y normalizar (quitar comillas, trim, lowercase para comparar)
+  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  const headers    = rawHeaders.map(h => h.toLowerCase());
 
-  const rows = lines.slice(1).map(line => {
-    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
-    const row  = {};
-    headers.forEach((h,i) => row[h] = cols[i] || '');
-    return row;
-  }).filter(r => r.asset);
+  const rows = lines.slice(1)
+    .filter(l => l.trim())   // ignorar líneas vacías
+    .map(line => {
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
+      const row  = {};
+      rawHeaders.forEach((h,i) => row[h.toLowerCase()] = cols[i] || '');
+      return row;
+    })
+    .filter(r => r.asset && r.asset.trim());
 
   if(!rows.length) throw new Error('Sin filas de activos en CSV');
 
   // Metadatos del ciclo (primera fila)
   const first = rows[0];
   const meta = {
-    timestamp:      first.timestamp    || '',
+    timestamp:      first.timestamp      || '',
     cycleTs:        first.timestamp ? new Date(first.timestamp).getTime() : Date.now(),
-    tier:           first.tier         || 'Pro',
+    tier:           first.tier           || 'Pro',
     capital_eur:    parseFloat(first.capital_eur) || INIT_CAP,
     top_n:          parseInt(first.top_n)         || rows.length,
     defensive_mode: (first.defensive_mode||'').toLowerCase() === 'true',
@@ -2785,15 +2891,19 @@ function parseCloudCSV(csv) {
   // Construir nuevo CFG
   const newCFG = {};
   rows.forEach(r => {
-    const key = r.asset.toUpperCase();
-    const sym = key + 'USDT';
+    const key   = r.asset.trim().toUpperCase();
+    // Símbolo Binance: si el asset ya termina en USDT usarlo tal cual, si no añadirlo
+    const sym   = key.endsWith('USDT') ? key : key + 'USDT';
+    const weight = parseFloat(r.weight) || 0;
     newCFG[key] = {
       sym,
-      w:     parseFloat(r.weight)         || 0,
-      res:   parseFloat(r.reserve)        || 0.40,
-      pft:   parseFloat(r.profit_per_grid)|| 0.006,
-      col:   ASSET_COLORS[key]            || '#94a3b8',
-      alloc: meta.capital_eur * (parseFloat(r.weight) || 0),
+      w:         weight,
+      res:       parseFloat(r.reserve)         || 0.40,
+      pft:       parseFloat(r.profit_per_grid) || parseFloat(r.profit) || 0.006,
+      col:       ASSET_COLORS[key]             || '#94a3b8',
+      alloc:     meta.capital_eur * weight,
+      // Precio de referencia del optimizer (si disponible)
+      pRefCloud: parseFloat(r.price_ref)       || 0,
     };
   });
 
@@ -2879,7 +2989,9 @@ async function fetchCloudConfig() {
 
   } catch(e) {
     console.error('fetchCloudConfig:', e);
-    if(cloudLbl) cloudLbl.textContent = `Cloud: error de red`;
+    // Distinguir error de red (grave) de error de formato (sin config optimizer)
+    const isNetErr = e.message.includes('HTTP') || e.message.includes('Failed to fetch') || e.message.includes('URL no');
+    if(cloudLbl) cloudLbl.textContent = isNetErr ? 'Cloud: error de red' : 'Cloud: sin optimizer';
     if(btn) { btn.textContent = '☁ Sync'; btn.disabled = false; }
     // Mantiene CFG fallback — no reinicia la simulación
   }
@@ -2889,33 +3001,40 @@ async function fetchCloudConfig() {
 //  BOOT
 // ================================================================
 async function boot() {
-  // 0. Mostrar banner si se abre como archivo local (file://) → CORS bloqueará el sync
+  // 0. Banner de protocolo local
   if(window.location.protocol === 'file:') {
     const b = $id('file-protocol-banner');
     if(b) b.classList.remove('hidden');
   }
 
-  // 1. Intentar cargar config del optimizer (con fallback si falla)
-  await fetchCloudConfig().catch(() => {});
+  // 1. Leer hoja de estado:
+  //    · detecta qué monedas están activas  → actualiza CFG dinámicamente
+  //    · guarda datos en _pendingSheetData  → se aplicarán en paso 3
+  await loadFromSheet();
 
-  // 2. Construir UI con CFG resultante (cloud o fallback)
+  // 2. Construir UI con el CFG resultante (hoja o fallback estático)
   buildAssetViews();
   buildCfgRows();
   initChart();
   initDistChart();
 
-  // 3. Cargar estado persistido desde Google Sheets
-  loadFromSheet();
+  // 3. Aplicar estado guardado ahora que S.assets está poblado
+  applyPendingSheetState();
 
   // 4. Conectar WebSocket de precios
   connectWS();
 
+  // 5. Intentar config del optimizer (no bloquea el arranque)
+  fetchCloudConfig().catch(() => {});
+
   if(window.lucide) lucide.createIcons();
 
-  // 5. Refresh periódico de UI y cloud meta
+  _bootComplete = true;  // a partir de aquí loadFromSheet usa Fase B
+
+  // 6. Intervals
   setInterval(renderUI, 2000);
-  setInterval(renderCloudMeta, 60000);          // actualiza "hace Xm" cada minuto
-  setInterval(fetchCloudConfig, CLOUD_SYNC_INTERVAL_MS);  // re-sync optimizer cada 4h
+  setInterval(renderCloudMeta, 60000);
+  setInterval(fetchCloudConfig, CLOUD_SYNC_INTERVAL_MS);
 }
 
 document.addEventListener('DOMContentLoaded', boot);
