@@ -2877,8 +2877,16 @@ function parseCloudCSV(csv) {
 
   if(!rows.length) throw new Error('Sin filas de activos en CSV');
 
-  // Metadatos del ciclo (primera fila)
-  const first = rows[0];
+  // Metadatos del ciclo más reciente (primera fila con el timestamp más alto)
+  // Detectar el timestamp más reciente antes de construir meta
+  const latestTsForMeta = rows.reduce((max, r) => {
+    const t = r.timestamp ? new Date(r.timestamp).getTime() : 0;
+    return t > max ? t : max;
+  }, 0);
+  const firstOfLatest = latestTsForMeta > 0
+    ? rows.find(r => r.timestamp && new Date(r.timestamp).getTime() === latestTsForMeta)
+    : rows[0];
+  const first = firstOfLatest || rows[0];
   const meta = {
     timestamp:      first.timestamp      || '',
     cycleTs:        first.timestamp ? new Date(first.timestamp).getTime() : Date.now(),
@@ -2888,11 +2896,19 @@ function parseCloudCSV(csv) {
     defensive_mode: (first.defensive_mode||'').toLowerCase() === 'true',
   };
 
-  // Construir nuevo CFG
-  // Normalizar pesos (pueden no sumar exactamente 1.0 por redondeo del optimizer)
-  const totalW = rows.reduce((s, r) => s + (parseFloat(r.weight) || 0), 0) || 1;
+  // Usar solo las filas del ciclo más reciente (timestamp más alto)
+  const latestTs = rows.reduce((max, r) => {
+    const t = r.timestamp ? new Date(r.timestamp).getTime() : 0;
+    return t > max ? t : max;
+  }, 0);
+  const cycleRows = latestTs > 0
+    ? rows.filter(r => r.timestamp && new Date(r.timestamp).getTime() === latestTs)
+    : rows;  // fallback: todas si no hay timestamp
+
+  // Normalizar pesos sobre las monedas del ciclo actual
+  const totalW = cycleRows.reduce((s, r) => s + (parseFloat(r.weight) || 0), 0) || 1;
   const newCFG = {};
-  rows.forEach(r => {
+  cycleRows.forEach(r => {
     const key    = r.asset.trim().toUpperCase();
     // Símbolo Binance: si el asset ya termina en USDT usarlo tal cual, si no añadirlo
     const sym    = key.endsWith('USDT') ? key : key + 'USDT';
