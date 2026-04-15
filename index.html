@@ -2933,6 +2933,9 @@ function rebuildFromCloudConfig() {
   S.t0Time    = null; S.t0Prices = {};
   S.prices    = {}; S.prevPrices = {};
 
+  // 4b. Repoblar S.assets con el nuevo CFG antes de construir la UI
+  Object.keys(CFG).forEach(k => { S.assets[k] = makeAsset(k); });
+
   // 5. Reconstruir DOM: tabs + vistas de activo + cfg rows
   const tabBar = $id('tab-bar');
   // Eliminar tabs de activos (mantener GLOBAL)
@@ -3013,6 +3016,9 @@ async function boot() {
   await loadFromSheet();
 
   // 2. Construir UI con el CFG resultante (hoja o fallback estático)
+  // Sincronizar S.assets con el CFG actual (puede haber cambiado en loadFromSheet)
+  Object.keys(S.assets).forEach(k => { if(!CFG[k]) delete S.assets[k]; });
+  Object.keys(CFG).forEach(k => { if(!S.assets[k]) S.assets[k] = makeAsset(k); });
   buildAssetViews();
   buildCfgRows();
   initChart();
