@@ -678,21 +678,47 @@ function calcCurrentBTCHold() {
 // ─────────────────────────────────────────────────────────
 // SHEETS DATA
 // ─────────────────────────────────────────────────────────
+async function fetchCSVSafe(gid, tabName) {
+  try {
+    const url = csvUrl(gid);
+    console.log(`[E3Argos] Fetching ${tabName}:`, url);
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    // Detect redirect to Google login (not a CSV)
+    if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      throw new Error(`${tabName}: respuesta HTML (sheet no publicado o no compartido)`);
+    }
+    return parseCSV(text);
+  } catch(e) {
+    console.error(`[E3Argos] Error en ${tabName}:`, e.message);
+    throw new Error(`${tabName}: ${e.message}`);
+  }
+}
+
 async function fetchSheets() {
   if (!cfg.sheetId) return;
+  let anyOk = false;
+  let lastErr = null;
+
+  // ── ESTADO_ACTUAL ──────────────────────────────────────
   try {
     if (cfg.gidEstado !== '') {
-      const rows = await fetchCSV(cfg.gidEstado);
-      state.assetRows = rows.filter(r => r.asset && r.asset !== 'asset' && r.initialized !== '');
+      const rows = await fetchCSVSafe(cfg.gidEstado, 'ESTADO_ACTUAL');
+      state.assetRows = rows.filter(r => r.asset && r.asset !== 'asset');
+      anyOk = true;
     }
-    if (cfg.gidTrades) {
-      const rows = await fetchCSV(cfg.gidTrades);
-      state.tradeRows = rows.filter(r => r.timestamp && r.timestamp !== 'timestamp').reverse();
+  } catch(e) { lastErr = e; console.warn('[E3Argos]', e.message); }
 
-      // Build hold positions from INIT trades
+  // ── TRADE_HISTORY ──────────────────────────────────────
+  try {
+    if (cfg.gidTrades) {
+      const rows = await fetchCSVSafe(cfg.gidTrades, 'TRADE_HISTORY');
+      state.tradeRows = rows.filter(r => r.timestamp && r.timestamp !== 'timestamp').reverse();
+      anyOk = true;
+
       buildHoldPositions();
 
-      // BTC hold: find t₀ (first INIT trade), fetch BTC price at that time
       const initTrades = state.tradeRows.filter(r => r.type === 'INIT');
       if (initTrades.length && !state.btcHoldQty) {
         const t0Ms = Math.min(...initTrades.map(r => new Date(r.timestamp).getTime()));
@@ -702,31 +728,38 @@ async function fetchSheets() {
             state.btcT0Price = klines[0].v;
             state.btcHoldQty = (5000 * (1 - 0.0005)) / state.btcT0Price;
           }
-        } catch(e) { /* ignore */ }
+        } catch(e) { /* ignore BTC klines error */ }
       }
     }
-    if (cfg.gidDash) {
-      const rows = await fetchCSV(cfg.gidDash);
-      state.dashRow = rows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
-    }
+  } catch(e) { lastErr = e; console.warn('[E3Argos]', e.message); }
 
+  // ── DASHBOARD_LIVE ──────────────────────────────────────
+  try {
+    if (cfg.gidDash) {
+      const rows = await fetchCSVSafe(cfg.gidDash, 'DASHBOARD_LIVE');
+      state.dashRow = rows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
+      anyOk = true;
+    }
+  } catch(e) { lastErr = e; console.warn('[E3Argos]', e.message); }
+
+  // ── Update UI ──────────────────────────────────────────
+  if (anyOk) {
     setDotState('sheets-dot', 'live');
     document.getElementById('pill-sheets').className = 'status-pill live';
     const now = new Date();
     setLabel('sheets-label', `Sheets ${fmtTime(now)}`);
     document.getElementById('ts-update').textContent = fmtTime(now);
-
     renderKPIs(); renderAssets(); renderTrades(); renderChart(); renderGridLevels();
     fetchPrices();
-
     const cycleId = state.dashRow ? (state.dashRow.last_cycle_id || state.dashRow.optimizer_ts || '') : '';
     document.getElementById('cycle-badge').textContent = cycleId ? `Ciclo: ${cycleId}` : '—';
-
-  } catch(e) {
+  } else if (lastErr) {
     setDotState('sheets-dot', 'dead');
     document.getElementById('pill-sheets').className = 'status-pill dead';
-    setLabel('sheets-label', 'Sheets: error');
-    console.error('Sheets error:', e);
+    // Show the specific tab that failed
+    const msg = lastErr.message.length > 40 ? lastErr.message.substring(0, 40) + '…' : lastErr.message;
+    setLabel('sheets-label', `Error: ${msg}`);
+    console.error('[E3Argos] Todos los tabs fallaron. Último error:', lastErr);
   }
 }
 
