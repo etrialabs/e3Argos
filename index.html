@@ -286,18 +286,14 @@
       </div>
       <div>
         <p style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:var(--e-bone)">Configuración</p>
-        <p style="font-size:0.72rem;color:var(--e-muted);margin-top:1px">Google Sheets — IDs de las pestañas</p>
+        <p style="font-size:0.72rem;color:var(--e-muted);margin-top:1px">Cloud Run — URL del optimizer</p>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:1rem">
       <div>
-        <label class="cfg-label">Spreadsheet ID</label>
-        <input id="inp-sheet-id" class="cfg-input" placeholder="ID del Google Sheet" autocomplete="off">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem">
-        <div><label class="cfg-label">GID ESTADO_ACTUAL</label><input id="inp-gid-estado" class="cfg-input" placeholder="0" autocomplete="off"></div>
-        <div><label class="cfg-label">GID TRADE_HISTORY</label><input id="inp-gid-trades" class="cfg-input" placeholder="0" autocomplete="off"></div>
-        <div><label class="cfg-label">GID DASHBOARD_LIVE</label><input id="inp-gid-dash" class="cfg-input" placeholder="0" autocomplete="off"></div>
+        <label class="cfg-label">Cloud Run URL (optimizer)</label>
+        <input id="inp-cloud-url" class="cfg-input" placeholder="https://optimizer-xxxx-ew.a.run.app" autocomplete="off" style="width:100%">
+        <p style="font-size:0.65rem;color:var(--e-faint);margin-top:4px">El dashboard leerá los datos desde <code style="color:var(--e-gold)">/data</code> — sin depender de acceso público al Sheet</p>
       </div>
     </div>
     <div class="flex justify-end gap-3 mt-6">
@@ -492,13 +488,12 @@
 // ─────────────────────────────────────────────────────────
 // CONFIG & STATE
 // ─────────────────────────────────────────────────────────
-const CFG_KEY = 'e3argos_cfg_v2';
+const CFG_KEY = 'e3argos_cfg_v3';
 
+// URL del endpoint /data del optimizer en Cloud Run
+// Cámbiala en el panel de Config (⚙ Config) si fuera necesario
 let cfg = {
-  sheetId:   '1w44kB57ZBwhBqkwKckGpfwIqUQIMdZt5li1MivlQIec',
-  gidEstado: '1451413997',
-  gidTrades: '2060994466',
-  gidDash:   '441367008'
+  cloudUrl: 'https://optimizer-hcpymhw46a-ew.a.run.app'
 };
 
 let state = {
@@ -521,21 +516,15 @@ let state = {
 // CONFIG OVERLAY
 // ─────────────────────────────────────────────────────────
 function loadConfig() {
-  document.getElementById('inp-sheet-id').value   = cfg.sheetId   || '';
-  document.getElementById('inp-gid-estado').value = cfg.gidEstado || '';
-  document.getElementById('inp-gid-trades').value = cfg.gidTrades || '';
-  document.getElementById('inp-gid-dash').value   = cfg.gidDash   || '';
+  document.getElementById('inp-cloud-url').value = cfg.cloudUrl || '';
 }
 function saveConfig() {
-  cfg.sheetId   = document.getElementById('inp-sheet-id').value.trim();
-  cfg.gidEstado = document.getElementById('inp-gid-estado').value.trim();
-  cfg.gidTrades = document.getElementById('inp-gid-trades').value.trim();
-  cfg.gidDash   = document.getElementById('inp-gid-dash').value.trim();
+  cfg.cloudUrl = document.getElementById('inp-cloud-url').value.trim().replace(/\/$/, '');
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
   closeConfig(); refreshAll();
 }
 function openConfig()  { loadConfig(); document.getElementById('cfg-overlay').style.display = 'flex'; }
-function closeConfig() { if (!cfg.sheetId) return; document.getElementById('cfg-overlay').style.display = 'none'; }
+function closeConfig() { if (!cfg.cloudUrl) return; document.getElementById('cfg-overlay').style.display = 'none'; }
 
 // ─────────────────────────────────────────────────────────
 // CURRENCY
@@ -586,13 +575,9 @@ function parseCSV(text) {
   });
 }
 
+// CSV helpers kept for legacy / fallback (not used in Cloud Run mode)
 function csvUrl(gid) {
-  return `https://docs.google.com/spreadsheets/d/${cfg.sheetId}/pub?gid=${gid}&single=true&output=csv&cachebust=${Date.now()}`;
-}
-async function fetchCSV(gid) {
-  const r = await fetch(csvUrl(gid));
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return parseCSV(await r.text());
+  return `https://docs.google.com/spreadsheets/d/${cfg.sheetId||''}/pub?gid=${gid}&single=true&output=csv&cachebust=${Date.now()}`;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -678,88 +663,58 @@ function calcCurrentBTCHold() {
 // ─────────────────────────────────────────────────────────
 // SHEETS DATA
 // ─────────────────────────────────────────────────────────
-async function fetchCSVSafe(gid, tabName) {
+async function fetchSheets() {
+  if (!cfg.cloudUrl) return;
   try {
-    const url = csvUrl(gid);
-    console.log(`[E3Argos] Fetching ${tabName}:`, url);
+    const url = `${cfg.cloudUrl}/data?cachebust=${Date.now()}`;
+    console.log('[E3Argos] Fetching /data:', url);
     const r = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const text = await r.text();
-    // Detect redirect to Google login (not a CSV)
-    if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-      throw new Error(`${tabName}: respuesta HTML (sheet no publicado o no compartido)`);
+    const data = await r.json();
+
+    // ── ESTADO_ACTUAL ──────────────────────────────────────
+    state.assetRows = (data.estado_actual || []).filter(r => r.asset && r.asset !== 'asset');
+
+    // ── TRADE_HISTORY ──────────────────────────────────────
+    state.tradeRows = (data.trade_history || [])
+      .filter(r => r.timestamp && r.timestamp !== 'timestamp')
+      .reverse();
+
+    buildHoldPositions();
+
+    const initTrades = state.tradeRows.filter(r => r.type === 'INIT');
+    if (initTrades.length && !state.btcHoldQty) {
+      const t0Ms = Math.min(...initTrades.map(r => new Date(r.timestamp).getTime()));
+      try {
+        const klines = await fetchBTCKlines(t0Ms, t0Ms + 60000);
+        if (klines.length) {
+          state.btcT0Price = klines[0].v;
+          state.btcHoldQty = (5000 * (1 - 0.0005)) / state.btcT0Price;
+        }
+      } catch(e) { /* ignore BTC klines error */ }
     }
-    return parseCSV(text);
-  } catch(e) {
-    console.error(`[E3Argos] Error en ${tabName}:`, e.message);
-    throw new Error(`${tabName}: ${e.message}`);
-  }
-}
 
-async function fetchSheets() {
-  if (!cfg.sheetId) return;
-  let anyOk = false;
-  let lastErr = null;
+    // ── DASHBOARD_LIVE ──────────────────────────────────────
+    const dashRows = data.dashboard_live || [];
+    state.dashRow = dashRows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
 
-  // ── ESTADO_ACTUAL ──────────────────────────────────────
-  try {
-    if (cfg.gidEstado !== '') {
-      const rows = await fetchCSVSafe(cfg.gidEstado, 'ESTADO_ACTUAL');
-      state.assetRows = rows.filter(r => r.asset && r.asset !== 'asset');
-      anyOk = true;
-    }
-  } catch(e) { lastErr = e; console.warn('[E3Argos]', e.message); }
-
-  // ── TRADE_HISTORY ──────────────────────────────────────
-  try {
-    if (cfg.gidTrades) {
-      const rows = await fetchCSVSafe(cfg.gidTrades, 'TRADE_HISTORY');
-      state.tradeRows = rows.filter(r => r.timestamp && r.timestamp !== 'timestamp').reverse();
-      anyOk = true;
-
-      buildHoldPositions();
-
-      const initTrades = state.tradeRows.filter(r => r.type === 'INIT');
-      if (initTrades.length && !state.btcHoldQty) {
-        const t0Ms = Math.min(...initTrades.map(r => new Date(r.timestamp).getTime()));
-        try {
-          const klines = await fetchBTCKlines(t0Ms, t0Ms + 60000);
-          if (klines.length) {
-            state.btcT0Price = klines[0].v;
-            state.btcHoldQty = (5000 * (1 - 0.0005)) / state.btcT0Price;
-          }
-        } catch(e) { /* ignore BTC klines error */ }
-      }
-    }
-  } catch(e) { lastErr = e; console.warn('[E3Argos]', e.message); }
-
-  // ── DASHBOARD_LIVE ──────────────────────────────────────
-  try {
-    if (cfg.gidDash) {
-      const rows = await fetchCSVSafe(cfg.gidDash, 'DASHBOARD_LIVE');
-      state.dashRow = rows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
-      anyOk = true;
-    }
-  } catch(e) { lastErr = e; console.warn('[E3Argos]', e.message); }
-
-  // ── Update UI ──────────────────────────────────────────
-  if (anyOk) {
+    // ── Update UI ──────────────────────────────────────────
     setDotState('sheets-dot', 'live');
     document.getElementById('pill-sheets').className = 'status-pill live';
     const now = new Date();
-    setLabel('sheets-label', `Sheets ${fmtTime(now)}`);
+    setLabel('sheets-label', `Datos ${fmtTime(now)}`);
     document.getElementById('ts-update').textContent = fmtTime(now);
     renderKPIs(); renderAssets(); renderTrades(); renderChart(); renderGridLevels();
     fetchPrices();
     const cycleId = state.dashRow ? (state.dashRow.last_cycle_id || state.dashRow.optimizer_ts || '') : '';
     document.getElementById('cycle-badge').textContent = cycleId ? `Ciclo: ${cycleId}` : '—';
-  } else if (lastErr) {
+
+  } catch(e) {
     setDotState('sheets-dot', 'dead');
     document.getElementById('pill-sheets').className = 'status-pill dead';
-    // Show the specific tab that failed
-    const msg = lastErr.message.length > 40 ? lastErr.message.substring(0, 40) + '…' : lastErr.message;
+    const msg = e.message.length > 45 ? e.message.substring(0, 45) + '…' : e.message;
     setLabel('sheets-label', `Error: ${msg}`);
-    console.error('[E3Argos] Todos los tabs fallaron. Último error:', lastErr);
+    console.error('[E3Argos] fetchSheets error:', e);
   }
 }
 
@@ -1146,7 +1101,7 @@ function stopPolling() {
 document.addEventListener('DOMContentLoaded', () => {
   try {
     const stored = JSON.parse(localStorage.getItem(CFG_KEY));
-    if (stored && stored.sheetId) cfg = stored;
+    if (stored && stored.cloudUrl) cfg = stored;
   } catch(e) {}
   loadConfig();
   document.getElementById('cfg-overlay').style.display = 'none';
