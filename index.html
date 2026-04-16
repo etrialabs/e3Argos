@@ -771,7 +771,9 @@ function parseCSV(text) {
 }
 
 function csvUrl(gid) {
-  return `https://docs.google.com/spreadsheets/d/${cfg.sheetId}/export?format=csv&gid=${gid}&cachebust=${Date.now()}`;
+  // /pub?...output=csv funciona con pestañas publicadas individualmente vía
+  // "Publicar en la web". El endpoint /export requiere doc completo compartido.
+  return `https://docs.google.com/spreadsheets/d/${cfg.sheetId}/pub?gid=${gid}&single=true&output=csv&cachebust=${Date.now()}`;
 }
 
 async function fetchCSV(gid) {
