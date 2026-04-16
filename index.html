@@ -4,25 +4,70 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>E3Argos — Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- SVG Grain texture -->
+<svg style="position:fixed;width:0;height:0" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feBlend in="SourceGraphic" mode="overlay" result="blend"/>
+      <feComposite in="blend" in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+</svg>
+
 <style>
   :root {
-    --e-dark:   #0D0D0D;
-    --e-carbon: #131313;
-    --e-panel:  #1A1A1A;
-    --e-border: #2A2520;
-    --e-border2:#3A3530;
-    --e-gold:   #C9A96E;
-    --e-gold15: rgba(201,169,110,0.15);
-    --e-gold08: rgba(201,169,110,0.08);
-    --e-bone:   #F5F0E8;
-    --e-muted:  #8A857E;
-    --e-faint:  #524E4A;
+    /* ── Core palette ── */
+    --e-dark:    #080808;
+    --e-carbon:  #0F0F0F;
+    --e-panel:   #161616;
+    --e-raised:  #1C1C1C;
+    --e-float:   #222222;
+    --e-border:  #242018;
+    --e-border2: #332E28;
+
+    /* ── Brand gold ── */
+    --e-gold:    #C9A96E;
+    --e-gold-lt: #DFC08A;
+    --e-gold-dk: #9A7A48;
+    --e-gold15:  rgba(201,169,110,0.15);
+    --e-gold08:  rgba(201,169,110,0.08);
+    --e-gold04:  rgba(201,169,110,0.04);
+    --e-gold-glow: rgba(201,169,110,0.12);
+
+    /* ── Text ── */
+    --e-bone:    #F2EDE3;
+    --e-muted:   #7A756D;
+    --e-faint:   #423E3A;
+    --e-subtle:  #2A2620;
+
+    /* ── Semantic ── */
+    --e-green:   #0DB375;
+    --e-green-bg:rgba(13,179,117,0.12);
+    --e-red:     #E84040;
+    --e-red-bg:  rgba(232,64,64,0.12);
+
+    /* ── Spacing tokens ── */
+    --sp-1: 0.25rem;
+    --sp-2: 0.5rem;
+    --sp-3: 0.75rem;
+    --sp-4: 1rem;
+    --sp-5: 1.25rem;
+    --sp-6: 1.5rem;
+    --sp-8: 2rem;
+
+    /* ── Shadows ── */
+    --shadow-card:  0 1px 3px rgba(0,0,0,0.6), 0 0 0 1px var(--e-border);
+    --shadow-gold:  0 0 24px rgba(201,169,110,0.08), 0 2px 8px rgba(0,0,0,0.5);
+    --shadow-float: 0 8px 32px rgba(0,0,0,0.7), 0 0 0 1px var(--e-border2), 0 0 40px rgba(201,169,110,0.06);
   }
 
-  *, *::before, *::after { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
   html { scroll-behavior: smooth; }
 
   body {
@@ -30,119 +75,374 @@
     color: var(--e-bone);
     font-family: 'Lato', sans-serif;
     font-size: 14px;
+    line-height: 1.6;
     min-height: 100vh;
+    /* Grain overlay */
+    position: relative;
   }
 
-  ::-webkit-scrollbar { width:5px; height:5px }
-  ::-webkit-scrollbar-track { background: var(--e-dark) }
-  ::-webkit-scrollbar-thumb { background: var(--e-border2); border-radius:3px }
+  /* Ambient background glows */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 0%, rgba(201,169,110,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 10% 90%, rgba(201,169,110,0.025) 0%, transparent 70%);
+  }
 
+  /* Grain texture layer */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    opacity: 0.5;
+  }
+
+  main, header { position: relative; z-index: 1; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--e-border2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--e-muted); }
+
+  /* ══════════════════════════════════════
+     HEADER
+     ══════════════════════════════════════ */
   .etria-header {
-    position:sticky; top:0; z-index:50;
-    background:rgba(13,13,13,0.96);
-    backdrop-filter:blur(12px);
-    border-bottom:1px solid var(--e-border);
-    padding:0.5rem 1.25rem;
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(8,8,8,0.94);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--e-border);
+    padding: var(--sp-3) var(--sp-5);
   }
 
+  /* Brand mark */
+  .brand-mark {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    color: var(--e-gold);
+    text-transform: uppercase;
+  }
+  .brand-mark span {
+    color: var(--e-muted);
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    font-size: 0.75rem;
+  }
+
+  /* Status pill */
+  .status-pill {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--e-border);
+    font-size: 0.68rem;
+    color: var(--e-muted);
+    transition: border-color 0.2s;
+  }
+  .status-pill.live { border-color: rgba(13,179,117,0.3); }
+  .status-pill.dead { border-color: rgba(232,64,64,0.3); }
+
+  /* ── Status dots ── */
+  @keyframes pulse-live {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(13,179,117,0.6); opacity: 1; }
+    50% { box-shadow: 0 0 0 4px rgba(13,179,117,0); opacity: 0.7; }
+  }
+  .dot-live { background: var(--e-green); animation: pulse-live 2.4s ease infinite; border-radius: 50%; }
+  .dot-dead { background: var(--e-red); border-radius: 50%; }
+  .dot-idle { background: var(--e-faint); border-radius: 50%; }
+
+  /* ── Buttons ── */
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 12px; font-size: 0.72rem;
+    border: 1px solid var(--e-border2); border-radius: 5px;
+    color: var(--e-muted); background: transparent;
+    cursor: pointer; font-family: 'Lato', sans-serif;
+    transition: color 0.18s, border-color 0.18s, transform 0.18s, background 0.18s;
+  }
+  .btn-ghost:hover {
+    color: var(--e-gold);
+    border-color: rgba(201,169,110,0.35);
+    background: var(--e-gold04);
+    transform: translateY(-1px);
+  }
+  .btn-ghost:active { transform: translateY(0); }
+  .btn-ghost:focus-visible { outline: 2px solid var(--e-gold); outline-offset: 2px; }
+
+  .btn-gold {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 14px; font-size: 0.72rem;
+    border: 1px solid rgba(201,169,110,0.4); border-radius: 5px;
+    color: var(--e-gold); background: var(--e-gold08);
+    cursor: pointer; font-family: 'Lato', sans-serif;
+    transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
+  }
+  .btn-gold:hover {
+    background: var(--e-gold15);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(201,169,110,0.15);
+  }
+  .btn-gold:active { transform: translateY(0); }
+  .btn-gold:focus-visible { outline: 2px solid var(--e-gold); outline-offset: 2px; }
+
+  /* ══════════════════════════════════════
+     CARDS — depth system
+     ══════════════════════════════════════ */
   .card {
     background: var(--e-carbon);
     border: 1px solid var(--e-border);
-    border-radius:6px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-card);
   }
-  .card-gold { box-shadow: 0 0 18px var(--e-gold08); }
 
-  .mono { font-family: ui-monospace,'Cascadia Mono','Consolas','Courier New',monospace; letter-spacing:-0.01em; }
+  /* Elevated card (for KPI hero) */
+  .card-elevated {
+    background: var(--e-panel);
+    border: 1px solid var(--e-border2);
+    border-radius: 8px;
+    box-shadow: var(--shadow-gold);
+    position: relative;
+    overflow: hidden;
+  }
+  /* Gold shimmer top edge */
+  .card-elevated::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--e-gold-dk), var(--e-gold), var(--e-gold-dk), transparent);
+    opacity: 0.7;
+  }
 
+  /* Accent card (left-border color) */
+  .card-accent-green { border-left: 2px solid rgba(13,179,117,0.5); }
+  .card-accent-red   { border-left: 2px solid rgba(232,64,64,0.4); }
+  .card-accent-gold  { border-left: 2px solid rgba(201,169,110,0.5); }
+
+  /* ══════════════════════════════════════
+     SECTION LABELS
+     ══════════════════════════════════════ */
   .section-label {
-    font-size:0.62rem; font-weight:700;
-    letter-spacing:0.12em; color:var(--e-muted);
-    text-transform:uppercase;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--e-muted);
+    text-transform: uppercase;
+    font-family: 'Lato', sans-serif;
   }
 
+  /* Card header row */
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--e-border);
+  }
+  .card-header::before {
+    content: '';
+    display: inline-block;
+    width: 2px; height: 12px;
+    background: linear-gradient(180deg, var(--e-gold), transparent);
+    border-radius: 1px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  /* Flex reordering hack */
+  .card-header > * { position: relative; }
+
+  /* ══════════════════════════════════════
+     KPI VALUES
+     ══════════════════════════════════════ */
   .kpi-val {
-    font-family:'Courier New',monospace;
-    font-size:clamp(1.1rem,2.5vw,1.55rem);
-    font-weight:700; letter-spacing:0.02em;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.35rem, 2.8vw, 1.9rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
   }
 
-  .btn-ghost {
-    padding:0.25rem 0.75rem; font-size:0.72rem;
-    border:1px solid var(--e-border); border-radius:4px;
-    color:var(--e-faint); background:transparent;
-    transition:color .2s,border-color .2s; cursor:pointer;
+  .kpi-label {
+    font-size: 0.64rem;
+    color: var(--e-faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 400;
+    margin-top: 4px;
   }
-  .btn-ghost:hover { color:var(--e-gold); border-color:rgba(201,169,110,0.4); }
-  .btn-gold {
-    padding:0.25rem 0.9rem; font-size:0.72rem;
-    border:1px solid rgba(201,169,110,0.5); border-radius:4px;
-    color:var(--e-gold); background:var(--e-gold08);
-    transition:background .2s; cursor:pointer;
+
+  /* ══════════════════════════════════════
+     MONO / CODE
+     ══════════════════════════════════════ */
+  .mono {
+    font-family: ui-monospace, 'Cascadia Mono', 'Consolas', 'Courier New', monospace;
+    letter-spacing: -0.01em;
   }
-  .btn-gold:hover { background:var(--e-gold15); }
 
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
-  .dot-live { background:#10b981; animation:blink 2s infinite; border-radius:50%; }
-  .dot-dead { background:#ef4444; border-radius:50%; }
-  .dot-idle { background:var(--e-faint); border-radius:50%; }
+  /* ══════════════════════════════════════
+     FLASH ANIMATIONS
+     ══════════════════════════════════════ */
+  @keyframes flash-up   { 0%{ background: rgba(13,179,117,0.12) } 100%{ background: transparent } }
+  @keyframes flash-down { 0%{ background: rgba(232,64,64,0.1) }   100%{ background: transparent } }
+  .flash-up   { animation: flash-up   0.8s ease-out; }
+  .flash-down { animation: flash-down 0.8s ease-out; }
 
-  @keyframes flash-up   { 0%{background:#052e1640} 100%{background:transparent} }
-  @keyframes flash-down { 0%{background:#3b000040} 100%{background:transparent} }
-  .flash-up   { animation: flash-up   0.7s ease-out; }
-  .flash-down { animation: flash-down 0.7s ease-out; }
+  /* ══════════════════════════════════════
+     PRICE COLORS
+     ══════════════════════════════════════ */
+  .price-up   { color: var(--e-green); }
+  .price-down { color: var(--e-red); }
+  .price-neu  { color: var(--e-muted); }
 
-  .price-up   { color:#10b981 }
-  .price-down { color:#ef4444 }
-  .price-neu  { color:var(--e-muted) }
+  /* ══════════════════════════════════════
+     ASSET TABLE
+     ══════════════════════════════════════ */
+  .asset-row {
+    border-bottom: 1px solid var(--e-subtle);
+    transition: background 0.15s;
+  }
+  .asset-row:last-child { border-bottom: none; }
+  .asset-row:hover { background: var(--e-gold04); }
 
-  /* Asset table */
-  .asset-row { border-bottom:1px solid var(--e-border); transition:background .15s; }
-  .asset-row:last-child { border-bottom:none; }
-  .asset-row:hover { background:rgba(201,169,110,0.04); }
+  .table-head {
+    font-size: 0.58rem; font-weight: 700;
+    letter-spacing: 0.1em; color: var(--e-faint);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--e-border);
+    background: rgba(255,255,255,0.015);
+  }
 
-  /* Trade log */
-  .trade-row { border-bottom:1px solid var(--e-border); font-size:0.72rem; }
-  .trade-row:last-child { border-bottom:none; }
-  .badge-buy  { background:rgba(16,185,129,0.15); color:#10b981; border-radius:3px; padding:1px 6px; font-size:0.65rem; font-weight:700; }
-  .badge-sell { background:rgba(239,68,68,0.15);  color:#ef4444;  border-radius:3px; padding:1px 6px; font-size:0.65rem; font-weight:700; }
-  .badge-init { background:rgba(99,102,241,0.15); color:#818cf8;  border-radius:3px; padding:1px 6px; font-size:0.65rem; font-weight:700; }
+  /* ══════════════════════════════════════
+     TRADE LOG
+     ══════════════════════════════════════ */
+  .trade-row {
+    border-bottom: 1px solid var(--e-subtle);
+    font-size: 0.72rem;
+    transition: background 0.12s;
+  }
+  .trade-row:last-child { border-bottom: none; }
+  .trade-row:hover { background: rgba(255,255,255,0.018); }
 
-  /* Config overlay */
+  .badge-buy  { background: var(--e-green-bg); color: var(--e-green); border-radius: 3px; padding: 2px 7px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; }
+  .badge-sell { background: var(--e-red-bg); color: var(--e-red); border-radius: 3px; padding: 2px 7px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; }
+  .badge-init { background: rgba(180,140,255,0.1); color: #B48CFF; border-radius: 3px; padding: 2px 7px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; }
+
+  /* ══════════════════════════════════════
+     TAB BUTTONS
+     ══════════════════════════════════════ */
+  .tab-btn {
+    padding: 3px 10px; font-size: 0.68rem; border-radius: 4px;
+    cursor: pointer; color: var(--e-faint);
+    background: transparent; border: 1px solid transparent;
+    font-family: 'Lato', sans-serif; font-weight: 400;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+  }
+  .tab-btn.active {
+    color: var(--e-gold);
+    background: var(--e-gold08);
+    border-color: rgba(201,169,110,0.25);
+    font-weight: 700;
+  }
+  .tab-btn:hover:not(.active) { color: var(--e-muted); transform: translateY(-1px); }
+  .tab-btn:active { transform: translateY(0); }
+  .tab-btn:focus-visible { outline: 2px solid var(--e-gold); outline-offset: 2px; }
+
+  /* ══════════════════════════════════════
+     CONFIG OVERLAY
+     ══════════════════════════════════════ */
   #cfg-overlay {
-    position:fixed; inset:0; z-index:100;
-    background:rgba(13,13,13,0.92); backdrop-filter:blur(8px);
-    display:flex; align-items:center; justify-content:center;
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(8,8,8,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center;
   }
   .cfg-card {
-    background:var(--e-panel); border:1px solid var(--e-border2);
-    border-radius:8px; padding:2rem; width:min(460px,92vw);
-    box-shadow:0 0 40px rgba(0,0,0,0.6);
+    background: var(--e-raised);
+    border: 1px solid var(--e-border2);
+    border-radius: 10px;
+    padding: var(--sp-8);
+    width: min(480px, 94vw);
+    box-shadow: var(--shadow-float);
+    position: relative;
+    overflow: hidden;
+  }
+  .cfg-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--e-gold-dk), var(--e-gold), var(--e-gold-dk), transparent);
+    opacity: 0.5;
   }
   .cfg-input {
-    width:100%; background:var(--e-dark); border:1px solid var(--e-border2);
-    border-radius:4px; color:var(--e-bone); font-family:'Courier New',monospace;
-    font-size:0.78rem; padding:0.45rem 0.7rem; outline:none;
-    transition:border-color .2s;
+    width: 100%;
+    background: var(--e-carbon);
+    border: 1px solid var(--e-border2);
+    border-radius: 5px;
+    color: var(--e-bone);
+    font-family: ui-monospace, 'Courier New', monospace;
+    font-size: 0.78rem;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
-  .cfg-input:focus { border-color:var(--e-gold); }
-  .cfg-label { font-size:0.65rem; font-weight:700; letter-spacing:0.1em; color:var(--e-muted); text-transform:uppercase; margin-bottom:4px; }
-
-  .grid-bar {
-    height:4px; border-radius:2px;
-    background:linear-gradient(90deg, var(--e-gold) var(--pct,0%), var(--e-border) var(--pct,0%));
+  .cfg-input:focus {
+    border-color: var(--e-gold);
+    box-shadow: 0 0 0 2px rgba(201,169,110,0.12);
+  }
+  .cfg-input::placeholder { color: var(--e-faint); }
+  .cfg-label {
+    font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.1em; color: var(--e-muted);
+    text-transform: uppercase; margin-bottom: 5px;
+    display: block;
   }
 
-  .tab-btn { padding:0.3rem 0.9rem; font-size:0.72rem; border-radius:4px; cursor:pointer; color:var(--e-faint); transition:color .15s; }
-  .tab-btn.active { color:var(--e-gold); background:var(--e-gold15); font-weight:700; }
-  .tab-btn:hover:not(.active) { color:var(--e-muted); }
-
-  @media(max-width:900px){
-    .main-grid { grid-template-columns:1fr !important; }
-    .hide-sm { display:none !important; }
+  /* ══════════════════════════════════════
+     GRID LEVEL BARS
+     ══════════════════════════════════════ */
+  .level-card {
+    background: var(--e-panel);
+    border: 1px solid var(--e-border);
+    border-radius: 7px;
+    padding: var(--sp-3) var(--sp-4);
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
-  @media(max-width:600px){
-    .kpi-val { font-size:1rem; }
-    .hide-xs { display:none !important; }
+  .level-card:hover {
+    border-color: var(--e-border2);
+    box-shadow: 0 0 16px rgba(201,169,110,0.06);
+  }
+
+  .grid-bar-track {
+    height: 5px;
+    background: var(--e-subtle);
+    border-radius: 3px;
+    position: relative;
+    overflow: visible;
+  }
+
+  /* Price marker with glow */
+  .price-marker {
+    position: absolute; top: -4px;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--e-dark);
+    transform: translateX(-50%);
+    transition: left 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  /* ══════════════════════════════════════
+     RESPONSIVE
+     ══════════════════════════════════════ */
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr !important; }
+    .hide-sm { display: none !important; }
+  }
+  @media (max-width: 600px) {
+    .kpi-val { font-size: 1.2rem; }
+    .hide-xs { display: none !important; }
   }
 </style>
 </head>
@@ -152,46 +452,52 @@
      HEADER
      ════════════════════════════════════════════════════ -->
 <header class="etria-header">
-  <div class="flex items-center justify-between gap-2 flex-wrap">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+
+    <!-- LEFT: brand + status -->
     <div class="flex items-center gap-3 flex-wrap">
 
-      <!-- Binance prices dot -->
-      <div class="flex items-center gap-1.5">
-        <div id="price-dot" class="w-2 h-2 dot-idle"></div>
-        <span id="price-label" class="text-xs" style="color:var(--e-faint)">Precios: —</span>
-      </div>
-
-      <!-- Sheets data dot -->
-      <div class="flex items-center gap-1.5 border-l pl-3" style="border-color:var(--e-border)">
-        <div id="sheets-dot" class="w-2 h-2 dot-idle"></div>
-        <span id="sheets-label" class="text-xs" style="color:var(--e-faint)">Sheets: —</span>
-      </div>
-
-      <!-- Last update -->
-      <div class="flex items-center gap-1.5 border-l pl-3 hide-sm" style="border-color:var(--e-border)">
-        <span class="text-xs mono" style="color:var(--e-faint)">Actualizado: </span>
-        <span id="ts-update" class="text-xs mono" style="color:var(--e-muted)">—</span>
-      </div>
-
-      <!-- Cycle badge -->
-      <div class="border-l pl-3 hide-sm" style="border-color:var(--e-border)">
-        <span id="cycle-badge" class="text-xs mono" style="color:var(--e-faint)">—</span>
-      </div>
-
       <!-- Brand -->
-      <span class="hidden lg:block border-l pl-3 text-sm tracking-widest font-semibold" style="border-color:var(--e-border); color:var(--e-gold); font-family:'Cormorant Garamond',serif">
-        E3ARGOS
-      </span>
+      <div class="brand-mark">E3<span>ARGOS</span></div>
+
+      <div class="w-px h-4 hide-xs" style="background:var(--e-border)"></div>
+
+      <!-- Binance status -->
+      <div id="pill-price" class="status-pill">
+        <div id="price-dot" class="w-2 h-2 dot-idle flex-shrink-0"></div>
+        <span id="price-label">Precios: —</span>
+      </div>
+
+      <!-- Sheets status -->
+      <div id="pill-sheets" class="status-pill">
+        <div id="sheets-dot" class="w-2 h-2 dot-idle flex-shrink-0"></div>
+        <span id="sheets-label">Sheets: —</span>
+      </div>
+
+      <!-- Timestamp -->
+      <div class="hide-sm flex items-center gap-1.5" style="color:var(--e-faint); font-size:0.68rem;">
+        <span class="mono" style="letter-spacing:0.04em">UPD</span>
+        <span id="ts-update" class="mono" style="color:var(--e-muted)">—</span>
+      </div>
+
+      <!-- Cycle -->
+      <div class="hide-sm">
+        <span id="cycle-badge" class="mono" style="font-size:0.68rem; color:var(--e-faint)">—</span>
+      </div>
     </div>
 
+    <!-- RIGHT: actions -->
     <div class="flex items-center gap-2">
       <button onclick="refreshAll()" class="btn-ghost">
-        <svg class="inline w-3 h-3 mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>Refresh
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        Refresh
       </button>
       <button onclick="openConfig()" class="btn-ghost">
-        <svg class="inline w-3 h-3 mr-1 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Config
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Config
       </button>
     </div>
+
   </div>
 </header>
 
@@ -201,38 +507,40 @@
 <div id="cfg-overlay">
   <div class="cfg-card">
     <div class="flex items-center gap-3 mb-6">
-      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--e-gold)" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <div style="width:36px;height:36px;background:var(--e-gold08);border:1px solid rgba(201,169,110,0.25);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--e-gold)" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
       <div>
-        <p class="font-semibold" style="color:var(--e-bone)">Configuración del Dashboard</p>
-        <p class="text-xs" style="color:var(--e-muted)">Google Sheets — IDs de las pestañas</p>
+        <p style="font-family:'Cormorant Garamond',serif; font-size:1.1rem; font-weight:600; color:var(--e-bone); letter-spacing:-0.01em">Configuración</p>
+        <p style="font-size:0.72rem; color:var(--e-muted); margin-top:1px">Google Sheets — IDs de las pestañas</p>
       </div>
     </div>
 
-    <div class="space-y-4">
+    <div style="display:flex; flex-direction:column; gap:1rem">
       <div>
-        <p class="cfg-label">Spreadsheet ID</p>
+        <label class="cfg-label">Spreadsheet ID</label>
         <input id="inp-sheet-id" class="cfg-input" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" autocomplete="off">
-        <p class="text-xs mt-1" style="color:var(--e-faint)">La cadena larga de la URL del Google Sheet</p>
+        <p style="font-size:0.68rem; color:var(--e-faint); margin-top:4px">La cadena larga de la URL del Google Sheet</p>
       </div>
 
       <div class="grid grid-cols-3 gap-3">
         <div>
-          <p class="cfg-label">GID estado_actual</p>
+          <label class="cfg-label">GID ESTADO_ACTUAL</label>
           <input id="inp-gid-estado" class="cfg-input" placeholder="0" autocomplete="off">
         </div>
         <div>
-          <p class="cfg-label">GID TRADE_HISTORY</p>
+          <label class="cfg-label">GID TRADE_HISTORY</label>
           <input id="inp-gid-trades" class="cfg-input" placeholder="1234567890" autocomplete="off">
         </div>
         <div>
-          <p class="cfg-label">GID DASHBOARD_LIVE</p>
+          <label class="cfg-label">GID DASHBOARD_LIVE</label>
           <input id="inp-gid-dash" class="cfg-input" placeholder="0987654321" autocomplete="off">
         </div>
       </div>
 
-      <div class="p-3 rounded" style="background:var(--e-dark); border:1px solid var(--e-border)">
-        <p class="text-xs mb-2" style="color:var(--e-muted)">Para obtener los GIDs: en Google Sheets, ejecuta el script Apps Script <code class="mono" style="color:var(--e-gold)">showPublishInstructions()</code> para ver los GIDs de cada pestaña. Los GIDs aparecen en la URL al seleccionar una pestaña (#gid=XXXXXX).</p>
-        <p class="text-xs" style="color:var(--e-muted)">El Sheet debe estar publicado en: <strong style="color:var(--e-bone)">Archivo → Compartir → Publicar en la web</strong> (seleccionar cada hoja como CSV).</p>
+      <div style="padding:12px 14px; border-radius:6px; background:var(--e-carbon); border:1px solid var(--e-border)">
+        <p style="font-size:0.7rem; color:var(--e-muted); line-height:1.6; margin-bottom:6px">Para obtener los GIDs: ejecuta el script Apps Script <code class="mono" style="color:var(--e-gold); background:var(--e-gold04); padding:1px 4px; border-radius:3px">showPublishInstructions()</code> para ver los GIDs de cada pestaña.</p>
+        <p style="font-size:0.7rem; color:var(--e-muted); line-height:1.6">El Sheet debe estar publicado en: <strong style="color:var(--e-bone)">Archivo → Compartir → Publicar en la web</strong> (CSV).</p>
       </div>
     </div>
 
@@ -246,54 +554,68 @@
 <!-- ════════════════════════════════════════════════════
      MAIN CONTENT
      ════════════════════════════════════════════════════ -->
-<main class="p-4 space-y-4 max-w-screen-2xl mx-auto">
+<main style="padding:1.25rem; max-width:1600px; margin:0 auto; display:flex; flex-direction:column; gap:1.25rem;">
 
-  <!-- KPI BAR -->
-  <div id="kpi-bar" class="grid grid-cols-2 gap-3" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-    <div class="card card-gold p-4">
-      <p class="section-label mb-1">Portfolio</p>
+  <!-- ── KPI BAR ── -->
+  <div id="kpi-bar" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(155px,1fr)); gap:0.75rem">
+
+    <!-- Hero: Portfolio -->
+    <div class="card-elevated" style="padding:1.1rem 1.25rem; grid-column: span 1;">
+      <p class="section-label" style="margin-bottom:6px; color:var(--e-gold-dk)">Portfolio</p>
       <p id="kpi-portfolio" class="kpi-val" style="color:var(--e-gold)">—</p>
-      <p class="text-xs mt-1" style="color:var(--e-faint)">Capital total EUR</p>
+      <p class="kpi-label">Capital total EUR</p>
     </div>
-    <div class="card p-4">
-      <p class="section-label mb-1">Grid Profit</p>
+
+    <!-- Grid Profit -->
+    <div class="card card-accent-green" style="padding:1.1rem 1.25rem">
+      <p class="section-label" style="margin-bottom:6px">Grid Profit</p>
       <p id="kpi-profit" class="kpi-val price-neu">—</p>
-      <p class="text-xs mt-1" style="color:var(--e-faint)">Beneficio acumulado</p>
+      <p class="kpi-label">Beneficio acumulado</p>
     </div>
-    <div class="card p-4">
-      <p class="section-label mb-1">Rentabilidad</p>
+
+    <!-- Rentabilidad -->
+    <div class="card" style="padding:1.1rem 1.25rem">
+      <p class="section-label" style="margin-bottom:6px">Rentabilidad</p>
       <p id="kpi-pnl-pct" class="kpi-val price-neu">—</p>
-      <p class="text-xs mt-1" style="color:var(--e-faint)">Desde inicio</p>
+      <p class="kpi-label">Desde inicio</p>
     </div>
-    <div class="card p-4">
-      <p class="section-label mb-1">Trades</p>
+
+    <!-- Trades -->
+    <div class="card" style="padding:1.1rem 1.25rem">
+      <p class="section-label" style="margin-bottom:6px">Trades</p>
       <p id="kpi-trades" class="kpi-val" style="color:var(--e-bone)">—</p>
-      <p class="text-xs mt-1" style="color:var(--e-faint)">Total ejecutados</p>
+      <p class="kpi-label">Total ejecutados</p>
     </div>
-    <div class="card p-4">
-      <p class="section-label mb-1">Comisiones</p>
-      <p id="kpi-fees" class="kpi-val price-down" style="font-size:1rem">—</p>
-      <p class="text-xs mt-1" style="color:var(--e-faint)">Total pagadas</p>
+
+    <!-- Comisiones -->
+    <div class="card card-accent-red" style="padding:1.1rem 1.25rem">
+      <p class="section-label" style="margin-bottom:6px">Comisiones</p>
+      <p id="kpi-fees" class="kpi-val price-down" style="font-size:1.2rem">—</p>
+      <p class="kpi-label">Total pagadas</p>
     </div>
-    <div class="card p-4">
-      <p class="section-label mb-1">Activos activos</p>
+
+    <!-- Activos activos -->
+    <div class="card card-accent-gold" style="padding:1.1rem 1.25rem">
+      <p class="section-label" style="margin-bottom:6px">Activos activos</p>
       <p id="kpi-assets" class="kpi-val" style="color:var(--e-bone)">—</p>
-      <p class="text-xs mt-1" style="color:var(--e-faint)">Operando ahora</p>
+      <p class="kpi-label">Operando ahora</p>
     </div>
   </div>
 
-  <!-- MAIN GRID -->
+  <!-- ── MAIN GRID ── -->
   <div class="main-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start">
 
-    <!-- LEFT: ASSET TABLE -->
+    <!-- Asset Table -->
     <div class="card" style="overflow:hidden">
-      <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--e-border)">
-        <p class="section-label">Activos — Estado Grid</p>
-        <span id="prices-ts" class="text-xs mono" style="color:var(--e-faint)">—</span>
+      <div class="card-header">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="section-label">Activos — Estado Grid</span>
+        </div>
+        <span id="prices-ts" class="mono" style="font-size:0.65rem; color:var(--e-faint)">—</span>
       </div>
 
       <!-- Header row -->
-      <div class="grid px-4 py-2" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr; font-size:0.62rem; font-weight:700; letter-spacing:0.08em; color:var(--e-faint); text-transform:uppercase; border-bottom:1px solid var(--e-border)">
+      <div class="table-head grid px-4 py-2" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr; gap:0.5rem">
         <span>Activo</span>
         <span class="text-right">Precio</span>
         <span class="text-right">Grid Prof.</span>
@@ -302,57 +624,56 @@
       </div>
 
       <div id="asset-list">
-        <div class="px-4 py-8 text-center text-xs" style="color:var(--e-faint)">Sin datos. Configura el Spreadsheet ID.</div>
+        <div style="padding:2.5rem 1.5rem; text-align:center; font-size:0.78rem; color:var(--e-faint)">Sin datos. Configura el Spreadsheet ID.</div>
       </div>
     </div>
 
-    <!-- RIGHT: EQUITY CHART -->
+    <!-- Equity Chart -->
     <div class="card" style="overflow:hidden">
-      <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--e-border)">
-        <p class="section-label">Curva de Capital</p>
-        <div class="flex gap-1">
+      <div class="card-header">
+        <span class="section-label">Curva de Capital</span>
+        <div style="display:flex; gap:4px">
           <button class="tab-btn active" onclick="setChartPeriod(this,'all')">Todo</button>
           <button class="tab-btn" onclick="setChartPeriod(this,'7d')">7D</button>
           <button class="tab-btn" onclick="setChartPeriod(this,'1d')">24H</button>
         </div>
       </div>
-      <div class="p-3" style="height:260px; position:relative">
+      <div style="padding:1rem; height:290px; position:relative">
         <canvas id="equity-chart"></canvas>
-        <div id="chart-empty" class="absolute inset-0 flex items-center justify-center text-xs" style="color:var(--e-faint)">
+        <div id="chart-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.78rem;color:var(--e-faint)">
           Sin historial de trades
         </div>
       </div>
     </div>
-
   </div>
 
-  <!-- GRID LEVELS DETAIL -->
+  <!-- ── GRID LEVELS ── -->
   <div class="card" style="overflow:hidden">
-    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--e-border)">
-      <p class="section-label">Niveles de Grid por Activo</p>
-      <span class="text-xs" style="color:var(--e-faint)">Precio vs buyLevel / sellLevel</span>
+    <div class="card-header">
+      <span class="section-label">Niveles de Grid por Activo</span>
+      <span style="font-size:0.68rem; color:var(--e-faint)">Precio vs buyLevel / sellLevel</span>
     </div>
-    <div id="grid-levels" class="p-4 grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
-      <div class="text-center text-xs py-4" style="color:var(--e-faint)">Sin datos</div>
+    <div id="grid-levels" style="padding:1rem; display:grid; gap:0.75rem; grid-template-columns:repeat(auto-fit, minmax(260px,1fr))">
+      <div style="text-align:center; font-size:0.78rem; padding:1.5rem; color:var(--e-faint)">Sin datos</div>
     </div>
   </div>
 
-  <!-- TRADE HISTORY -->
+  <!-- ── TRADE HISTORY ── -->
   <div class="card" style="overflow:hidden">
-    <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--e-border)">
-      <p class="section-label">Historial de Trades</p>
-      <div class="flex items-center gap-3">
-        <span id="trade-count-label" class="text-xs" style="color:var(--e-faint)">—</span>
-        <div class="flex gap-1">
+    <div class="card-header">
+      <span class="section-label">Historial de Trades</span>
+      <div style="display:flex; align-items:center; gap:0.75rem">
+        <span id="trade-count-label" style="font-size:0.68rem; color:var(--e-faint)">—</span>
+        <div style="display:flex; gap:4px">
           <button class="tab-btn active" id="tf-all"  onclick="setTradeFilter(this,'ALL')">Todos</button>
-          <button class="tab-btn"         id="tf-buy"  onclick="setTradeFilter(this,'BUY')">BUY</button>
-          <button class="tab-btn"         id="tf-sell" onclick="setTradeFilter(this,'SELL')">SELL</button>
+          <button class="tab-btn"        id="tf-buy"  onclick="setTradeFilter(this,'BUY')">BUY</button>
+          <button class="tab-btn"        id="tf-sell" onclick="setTradeFilter(this,'SELL')">SELL</button>
         </div>
       </div>
     </div>
 
     <!-- Table header -->
-    <div class="px-4 py-2 grid hide-sm" style="grid-template-columns:140px 60px 80px 90px 80px 90px 80px 1fr; font-size:0.62rem; font-weight:700; letter-spacing:0.08em; color:var(--e-faint); text-transform:uppercase; border-bottom:1px solid var(--e-border); gap:0.5rem">
+    <div class="table-head hide-sm grid px-4 py-2" style="grid-template-columns:140px 60px 80px 90px 80px 90px 80px 1fr; gap:0.5rem">
       <span>Timestamp</span>
       <span>Activo</span>
       <span>Tipo</span>
@@ -364,14 +685,14 @@
     </div>
 
     <div id="trade-list" style="max-height:380px; overflow-y:auto">
-      <div class="px-4 py-8 text-center text-xs" style="color:var(--e-faint)">Sin historial de trades</div>
+      <div style="padding:2.5rem 1.5rem; text-align:center; font-size:0.78rem; color:var(--e-faint)">Sin historial de trades</div>
     </div>
   </div>
 
 </main>
 
 <!-- ════════════════════════════════════════════════════
-     JAVASCRIPT
+     JAVASCRIPT  (unchanged)
      ════════════════════════════════════════════════════ -->
 <script>
 // ─────────────────────────────────────────────────────────
@@ -380,17 +701,17 @@
 const CFG_KEY = 'e3argos_cfg_v2';
 
 let cfg = {
-  sheetId: '',
-  gidEstado: '0',
-  gidTrades: '',
-  gidDash: ''
+  sheetId:   '1w44kB57ZBwhBqkwKckGpfwIqUQIMdZt5li1MivlQIec',
+  gidEstado: '1451413997',
+  gidTrades: '2060994466',
+  gidDash:   '441367008'
 };
 
 let state = {
-  assetRows: [],       // from estado_actual
-  tradeRows: [],       // from TRADE_HISTORY (all)
-  dashRow: null,       // from DASHBOARD_LIVE row 2
-  prices: {},          // {sym: {price, prev, dir}}
+  assetRows: [],
+  tradeRows: [],
+  dashRow: null,
+  prices: {},
   tradeFilter: 'ALL',
   chartPeriod: 'all',
   equityChart: null
@@ -423,7 +744,7 @@ function openConfig() {
 }
 
 function closeConfig() {
-  if (!cfg.sheetId) return; // force config if nothing saved
+  if (!cfg.sheetId) return;
   document.getElementById('cfg-overlay').style.display = 'none';
 }
 
@@ -460,11 +781,10 @@ async function fetchCSV(gid) {
 }
 
 // ─────────────────────────────────────────────────────────
-// BINANCE PRICES  (every 10s)
+// BINANCE PRICES
 // ─────────────────────────────────────────────────────────
 async function fetchPrices() {
   if (!state.assetRows.length) return;
-  // Build symbols list from estado_actual sym column
   const syms = [...new Set(state.assetRows.map(r => r.sym).filter(s => s && s !== 'sym'))];
   if (!syms.length) return;
 
@@ -477,54 +797,50 @@ async function fetchPrices() {
     data.forEach(({ symbol, price }) => {
       const prev = state.prices[symbol] ? state.prices[symbol].price : null;
       const p = parseFloat(price);
-      state.prices[symbol] = {
-        price: p,
-        prev,
-        dir: prev === null ? 'neu' : p > prev ? 'up' : p < prev ? 'down' : 'neu'
-      };
+      state.prices[symbol] = { price: p, prev, dir: prev === null ? 'neu' : p > prev ? 'up' : p < prev ? 'down' : 'neu' };
     });
 
-    setDot('price-dot', 'live');
-    setLabel('price-label', `Binance ${fmtTime(new Date())}`, '#8A857E');
+    setDotState('price-dot', 'live');
+    document.getElementById('pill-price').className = 'status-pill live';
+    setLabel('price-label', `Binance ${fmtTime(new Date())}`, null);
     document.getElementById('prices-ts').textContent = fmtTime(new Date());
 
     renderAssets();
     renderGridLevels();
   } catch(e) {
-    setDot('price-dot', 'dead');
-    setLabel('price-label', 'Binance: error', '#ef4444');
+    setDotState('price-dot', 'dead');
+    document.getElementById('pill-price').className = 'status-pill dead';
+    setLabel('price-label', 'Binance: error', null);
     console.error('Binance price error:', e);
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// SHEETS DATA  (every 30s)
+// SHEETS DATA
 // ─────────────────────────────────────────────────────────
 async function fetchSheets() {
   if (!cfg.sheetId) return;
 
   try {
-    // 1. estado_actual
     if (cfg.gidEstado !== '') {
       const rows = await fetchCSV(cfg.gidEstado);
       state.assetRows = rows.filter(r => r.asset && r.asset !== 'asset' && r.initialized !== '');
     }
 
-    // 2. TRADE_HISTORY
     if (cfg.gidTrades) {
       const rows = await fetchCSV(cfg.gidTrades);
-      state.tradeRows = rows.filter(r => r.timestamp && r.timestamp !== 'timestamp').reverse(); // newest first
+      state.tradeRows = rows.filter(r => r.timestamp && r.timestamp !== 'timestamp').reverse();
     }
 
-    // 3. DASHBOARD_LIVE
     if (cfg.gidDash) {
       const rows = await fetchCSV(cfg.gidDash);
-      state.dashRow = rows.find(r => r.last_updated && r.last_updated !== 'last_updated' && r.last_updated !== 'NOT_STARTED') || null;
+      state.dashRow = rows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
     }
 
-    setDot('sheets-dot', 'live');
+    setDotState('sheets-dot', 'live');
+    document.getElementById('pill-sheets').className = 'status-pill live';
     const now = new Date();
-    setLabel('sheets-label', `Sheets ${fmtTime(now)}`, '#8A857E');
+    setLabel('sheets-label', `Sheets ${fmtTime(now)}`, null);
     document.getElementById('ts-update').textContent = fmtTime(now);
 
     renderKPIs();
@@ -532,14 +848,15 @@ async function fetchSheets() {
     renderTrades();
     renderChart();
     renderGridLevels();
-    fetchPrices(); // refresh prices immediately after new data
+    fetchPrices();
 
     const cycleId = state.dashRow ? (state.dashRow.last_cycle_id || state.dashRow.optimizer_ts || '—') : '—';
     document.getElementById('cycle-badge').textContent = cycleId !== '—' ? `Ciclo: ${cycleId}` : '—';
 
   } catch(e) {
-    setDot('sheets-dot', 'dead');
-    setLabel('sheets-label', 'Sheets: error', '#ef4444');
+    setDotState('sheets-dot', 'dead');
+    document.getElementById('pill-sheets').className = 'status-pill dead';
+    setLabel('sheets-label', 'Sheets: error', null);
     console.error('Sheets error:', e);
   }
 }
@@ -551,18 +868,17 @@ function renderKPIs() {
   const d = state.dashRow;
   if (!d) {
     ['kpi-portfolio','kpi-profit','kpi-pnl-pct','kpi-trades','kpi-fees','kpi-assets'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = '—';
+      const el = document.getElementById(id); if (el) el.textContent = '—';
     });
     return;
   }
 
-  const portfolio = parseFloat(d.total_portfolio_eur || d['total_portfolio_eur'] || 0);
-  const profit    = parseFloat(d.total_gridprofit_eur || 0);
-  const fees      = parseFloat(d.total_fees_eur || 0);
-  const pnlPct    = parseFloat(d.pnl_pct || 0);
-  const trades    = parseInt(d.total_trades || 0);
-  const assets    = parseInt(d.active_assets || 0);
+  const portfolio = parseFloat(d.total_portfolio_eur || 0);
+  const profit    = parseFloat(d.total_grid_profit   || 0);   // fix: era total_gridprofit_eur
+  const fees      = parseFloat(d.total_fees          || 0);   // fix: era total_fees_eur
+  const pnlPct    = parseFloat(d.total_pnl_pct       || 0);   // fix: era pnl_pct
+  const trades    = state.tradeRows.length;                    // fix: columna no existe en DASHBOARD_LIVE
+  const assets    = d.active_assets ? d.active_assets.split(',').filter(Boolean).length : 0; // fix: era parseInt de un string
 
   setText('kpi-portfolio', fmtEur(portfolio));
   const profitEl = document.getElementById('kpi-profit');
@@ -584,7 +900,7 @@ function renderKPIs() {
 function renderAssets() {
   const el = document.getElementById('asset-list');
   if (!state.assetRows.length) {
-    el.innerHTML = '<div class="px-4 py-8 text-center text-xs" style="color:var(--e-faint)">Sin activos en estado_actual</div>';
+    el.innerHTML = '<div style="padding:2.5rem 1.5rem;text-align:center;font-size:0.78rem;color:var(--e-faint)">Sin activos en estado_actual</div>';
     return;
   }
 
@@ -597,26 +913,24 @@ function renderAssets() {
     const priceStr = price !== null ? fmtPrice(price) : '—';
     const priceClass = 'price-' + dir;
 
-    const gridProfit  = parseFloat(row.gridProfit  || 0);
-    const reserveVal  = parseFloat(row.reserveVal  || 0);
-    const qty         = parseFloat(row.qty         || 0);
-    const posEur      = price !== null ? qty * price : null;
+    const gridProfit = parseFloat(row.gridProfit || 0);
+    const reserveVal = parseFloat(row.reserveVal || 0);
+    const qty        = parseFloat(row.qty || 0);
+    const posEur     = price !== null ? qty * price : null;
 
-    // Convert USDT to EUR (approximation: use price as is, Binance pairs are USDT)
-    // Note: no live EUR conversion — show as USDT or indicate
-    const posStr = posEur !== null ? fmtEur(posEur) + '<span style="color:var(--e-faint);font-size:0.65rem"> ≈</span>' : '—';
-
+    const posStr = posEur !== null ? fmtEur(posEur) + '<span style="color:var(--e-faint);font-size:0.6rem"> ≈</span>' : '—';
     const init = row.initialized === 'TRUE';
-    const statusDot = init
-      ? `<span class="dot-live w-1.5 h-1.5 inline-block mr-1"></span>`
-      : `<span class="dot-idle w-1.5 h-1.5 inline-block mr-1"></span>`;
 
-    return `<div class="asset-row grid px-4 py-3 items-center flash-${dir === 'neu' ? '' : dir}"
-                 style="grid-template-columns:1fr 1fr 1fr 1fr 1fr">
-      <div class="flex items-center gap-1">
+    const statusDot = init
+      ? `<span class="dot-live" style="width:6px;height:6px;display:inline-block;margin-right:5px;flex-shrink:0"></span>`
+      : `<span class="dot-idle" style="width:6px;height:6px;display:inline-block;margin-right:5px;flex-shrink:0"></span>`;
+
+    return `<div class="asset-row grid px-4 items-center flash-${dir === 'neu' ? '' : dir}"
+                 style="grid-template-columns:1fr 1fr 1fr 1fr 1fr; padding-top:10px; padding-bottom:10px">
+      <div style="display:flex;align-items:center">
         ${statusDot}
-        <span class="font-bold" style="font-size:0.82rem">${asset}</span>
-        <span class="text-xs" style="color:var(--e-faint)">${init ? '' : 'INIT'}</span>
+        <span style="font-weight:700;font-size:0.84rem;letter-spacing:-0.01em">${asset}</span>
+        ${!init ? '<span style="font-size:0.6rem;color:var(--e-faint);margin-left:4px">INIT</span>' : ''}
       </div>
       <div class="text-right mono text-sm ${priceClass}">${priceStr}</div>
       <div class="text-right mono text-sm ${gridProfit >= 0 ? 'price-up' : 'price-down'}">${fmtEur(gridProfit)}</div>
@@ -633,7 +947,7 @@ function renderGridLevels() {
   const el = document.getElementById('grid-levels');
   const rows = state.assetRows.filter(r => r.initialized === 'TRUE' && r.pRef);
   if (!rows.length) {
-    el.innerHTML = '<div class="text-center text-xs py-4" style="color:var(--e-faint)">Sin activos inicializados</div>';
+    el.innerHTML = '<div style="text-align:center;font-size:0.78rem;padding:1.5rem;color:var(--e-faint)">Sin activos inicializados</div>';
     return;
   }
 
@@ -646,46 +960,40 @@ function renderGridLevels() {
     const pInfo     = state.prices[sym];
     const price     = pInfo ? pInfo.price : pRef;
 
-    // Position on bar: 0% = buyLevel, 100% = sellLevel
-    const range   = sellLevel - buyLevel;
-    const pct     = range > 0 ? Math.max(0, Math.min(100, ((price - buyLevel) / range) * 100)) : 50;
-    const profit  = parseFloat(row.profit_per_grid || 0);
-    const tradeCount = parseInt(row.tradeCount || 0);
-    const gridProfit = parseFloat(row.gridProfit || 0);
+    const range  = sellLevel - buyLevel;
+    const pct    = range > 0 ? Math.max(0, Math.min(100, ((price - buyLevel) / range) * 100)) : 50;
+    const profit = parseFloat(row.profit_per_grid || 0);
+    const tradeCount  = parseInt(row.tradeCount || 0);
+    const gridProfit  = parseFloat(row.gridProfit || 0);
 
-    const priceColor = price >= sellLevel ? '#ef4444' : price <= buyLevel ? '#10b981' : 'var(--e-gold)';
+    const priceColor = price >= sellLevel ? 'var(--e-red)' : price <= buyLevel ? 'var(--e-green)' : 'var(--e-gold)';
+    const priceGlow  = price >= sellLevel ? 'rgba(232,64,64,0.4)' : price <= buyLevel ? 'rgba(13,179,117,0.4)' : 'rgba(201,169,110,0.4)';
 
-    return `<div class="p-3 rounded" style="background:var(--e-dark); border:1px solid var(--e-border)">
-      <div class="flex items-center justify-between mb-3">
+    return `<div class="level-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div>
-          <span class="font-bold" style="font-size:0.85rem">${asset}</span>
-          <span class="text-xs ml-2" style="color:var(--e-faint)">${(profit*100).toFixed(2)}% grid</span>
+          <span style="font-weight:700;font-size:0.88rem;letter-spacing:-0.01em">${asset}</span>
+          <span style="font-size:0.65rem;color:var(--e-faint);margin-left:7px">${(profit*100).toFixed(2)}% / grid</span>
         </div>
-        <div class="text-right">
-          <span class="mono font-bold" style="color:${priceColor}; font-size:0.8rem">${fmtPrice(price)}</span>
-        </div>
+        <div style="font-family:'Cormorant Garamond',serif;font-weight:700;color:${priceColor};font-size:1rem;letter-spacing:-0.01em">${fmtPrice(price)}</div>
       </div>
 
-      <!-- Level bar -->
-      <div class="relative mb-3">
-        <div class="flex justify-between text-xs mb-1">
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:0.65rem;margin-bottom:5px">
           <span class="price-up mono">${fmtPrice(buyLevel)}</span>
-          <span style="color:var(--e-faint)" class="text-xs">pRef ${fmtPrice(pRef)}</span>
+          <span style="color:var(--e-faint)">ref ${fmtPrice(pRef)}</span>
           <span class="price-down mono">${fmtPrice(sellLevel)}</span>
         </div>
-        <div style="height:6px; background:var(--e-border); border-radius:3px; position:relative; overflow:visible">
-          <!-- BUY zone -->
-          <div style="position:absolute; left:0; top:0; width:${pct}%; height:100%; background:linear-gradient(90deg,rgba(16,185,129,0.4),rgba(16,185,129,0.1)); border-radius:3px 0 0 3px"></div>
-          <!-- SELL zone -->
-          <div style="position:absolute; left:${pct}%; top:0; width:${100-pct}%; height:100%; background:linear-gradient(90deg,rgba(239,68,68,0.1),rgba(239,68,68,0.4)); border-radius:0 3px 3px 0"></div>
-          <!-- Price marker -->
-          <div style="position:absolute; top:-3px; left:calc(${pct}% - 5px); width:10px; height:12px; background:${priceColor}; border-radius:2px; border:1px solid var(--e-dark)"></div>
+        <div class="grid-bar-track">
+          <div style="position:absolute;left:0;top:0;width:${pct}%;height:100%;background:linear-gradient(90deg,rgba(13,179,117,0.5),rgba(13,179,117,0.15));border-radius:3px 0 0 3px"></div>
+          <div style="position:absolute;left:${pct}%;top:0;width:${100-pct}%;height:100%;background:linear-gradient(90deg,rgba(232,64,64,0.15),rgba(232,64,64,0.5));border-radius:0 3px 3px 0"></div>
+          <div style="position:absolute;top:-4px;left:calc(${pct}% - 6px);width:13px;height:13px;background:${priceColor};border-radius:50%;border:2px solid var(--e-dark);box-shadow:0 0 8px ${priceGlow}"></div>
         </div>
       </div>
 
-      <div class="flex justify-between text-xs" style="color:var(--e-muted)">
+      <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--e-muted)">
         <span>${tradeCount} trades</span>
-        <span class="${gridProfit >= 0 ? 'price-up' : 'price-down'}">+${fmtEur(gridProfit)}</span>
+        <span class="${gridProfit >= 0 ? 'price-up' : 'price-down'} mono" style="font-weight:700">${gridProfit >= 0 ? '+' : ''}${fmtEur(gridProfit)}</span>
       </div>
     </div>`;
   }).join('');
@@ -711,7 +1019,7 @@ function renderTrades() {
   document.getElementById('trade-count-label').textContent = `${filtered.length} trades`;
 
   if (!filtered.length) {
-    el.innerHTML = `<div class="px-4 py-8 text-center text-xs" style="color:var(--e-faint)">Sin trades ${state.tradeFilter !== 'ALL' ? state.tradeFilter : ''}</div>`;
+    el.innerHTML = `<div style="padding:2.5rem 1.5rem;text-align:center;font-size:0.78rem;color:var(--e-faint)">Sin trades ${state.tradeFilter !== 'ALL' ? state.tradeFilter : ''}</div>`;
     return;
   }
 
@@ -729,19 +1037,21 @@ function renderTrades() {
                 : type === 'SELL' ? '<span class="badge-sell">SELL</span>'
                 :                   '<span class="badge-init">INIT</span>';
 
-    const pnlStr   = type === 'SELL' ? `<span class="${pnl >= 0 ? 'price-up' : 'price-down'}">${fmtEur(pnl)}</span>` : '<span style="color:var(--e-faint)">—</span>';
+    const pnlStr   = type === 'SELL'
+      ? `<span class="${pnl >= 0 ? 'price-up' : 'price-down'} mono">${fmtEur(pnl)}</span>`
+      : '<span style="color:var(--e-faint)">—</span>';
     const capStr   = capital > 0 ? fmtEur(capital) : '—';
 
     return `<div class="trade-row grid px-4 py-2 items-center gap-2"
                  style="grid-template-columns:140px 60px 80px 90px 80px 90px 80px 1fr">
-      <span class="mono" style="color:var(--e-muted); font-size:0.7rem">${ts}</span>
-      <span class="font-bold" style="font-size:0.75rem">${asset}</span>
+      <span class="mono" style="color:var(--e-muted);font-size:0.68rem">${ts}</span>
+      <span style="font-weight:700;font-size:0.74rem">${asset}</span>
       <span>${badge}</span>
       <span class="text-right mono" style="font-size:0.72rem">${fmtPrice(price)}</span>
-      <span class="text-right mono" style="font-size:0.72rem; color:var(--e-bone)">${qty.toFixed(6)}</span>
-      <span class="text-right mono" style="font-size:0.72rem; color:var(--e-bone)">${fmtEur(value)}</span>
-      <span class="text-right mono" style="font-size:0.72rem">${pnlStr}</span>
-      <span class="text-right mono" style="font-size:0.72rem; color:var(--e-gold)">${capStr}</span>
+      <span class="text-right mono" style="font-size:0.72rem;color:var(--e-bone)">${qty.toFixed(6)}</span>
+      <span class="text-right mono" style="font-size:0.72rem;color:var(--e-bone)">${fmtEur(value)}</span>
+      <span class="text-right" style="font-size:0.72rem">${pnlStr}</span>
+      <span class="text-right mono" style="font-size:0.72rem;color:var(--e-gold)">${capStr}</span>
     </div>`;
   }).join('');
 }
@@ -760,7 +1070,6 @@ function renderChart() {
   const canvas  = document.getElementById('equity-chart');
   const emptyEl = document.getElementById('chart-empty');
 
-  // Only SELL and BUY events have capital_total_eur meaningful
   let data = state.tradeRows
     .filter(r => (r.type === 'SELL' || r.type === 'BUY') && r.capital_total_eur && r.timestamp)
     .map(r => ({ t: new Date(r.timestamp), v: parseFloat(r.capital_total_eur) }))
@@ -773,7 +1082,6 @@ function renderChart() {
     return;
   }
 
-  // Filter by period
   const now = Date.now();
   if (state.chartPeriod === '7d') data = data.filter(d => now - d.t.getTime() <= 7*86400000);
   if (state.chartPeriod === '1d') data = data.filter(d => now - d.t.getTime() <= 86400000);
@@ -787,15 +1095,13 @@ function renderChart() {
   const first = values[0] || 0;
   const last  = values[values.length - 1] || 0;
   const isPositive = last >= first;
-
-  const chartColor  = isPositive ? '#10b981' : '#ef4444';
-  const gradientBg  = isPositive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+  const chartColor = isPositive ? '#0DB375' : '#E84040';
 
   if (state.equityChart) { state.equityChart.destroy(); }
 
   const ctx = canvas.getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, 240);
-  grad.addColorStop(0, isPositive ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)');
+  const grad = ctx.createLinearGradient(0, 0, 0, 260);
+  grad.addColorStop(0, isPositive ? 'rgba(13,179,117,0.25)' : 'rgba(232,64,64,0.25)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
 
   state.equityChart = new Chart(ctx, {
@@ -808,44 +1114,45 @@ function renderChart() {
         borderWidth: 1.5,
         backgroundColor: grad,
         fill: true,
-        tension: 0.3,
+        tension: 0.35,
         pointRadius: data.length < 30 ? 3 : 0,
-        pointHoverRadius: 4,
-        pointBackgroundColor: chartColor
+        pointHoverRadius: 5,
+        pointBackgroundColor: chartColor,
+        pointBorderColor: 'var(--e-dark)',
+        pointBorderWidth: 1.5
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 400 },
+      animation: { duration: 500, easing: 'easeOutQuart' },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#1A1A1A',
-          borderColor: '#3A3530',
+          backgroundColor: '#1C1C1C',
+          borderColor: '#332E28',
           borderWidth: 1,
-          titleColor: '#8A857E',
-          bodyColor: '#F5F0E8',
-          callbacks: {
-            label: ctx => ` ${fmtEur(ctx.raw)}`
-          }
+          titleColor: '#7A756D',
+          bodyColor: '#F2EDE3',
+          padding: 10,
+          callbacks: { label: ctx => ` ${fmtEur(ctx.raw)}` }
         }
       },
       scales: {
         x: {
           ticks: {
-            color: '#524E4A', maxTicksLimit: 6,
+            color: '#423E3A', maxTicksLimit: 6,
             font: { family: "'Courier New', monospace", size: 10 }
           },
-          grid: { color: '#1A1A1A' }
+          grid: { color: 'rgba(36,32,24,0.8)' }
         },
         y: {
           ticks: {
-            color: '#524E4A',
+            color: '#423E3A',
             font: { family: "'Courier New', monospace", size: 10 },
             callback: v => fmtEur(v)
           },
-          grid: { color: '#1A1A1A' }
+          grid: { color: 'rgba(36,32,24,0.8)' }
         }
       }
     }
@@ -879,33 +1186,29 @@ function fmtTs(ts) {
 function setText(id, val) {
   const el = document.getElementById(id); if (el) el.textContent = val;
 }
-function setDot(id, state) {
+function setDotState(id, s) {
   const el = document.getElementById(id); if (!el) return;
-  el.className = `w-2 h-2 dot-${state}`;
+  el.className = `dot-${s}`;
+  el.style.cssText = 'width:8px;height:8px;flex-shrink:0;display:inline-block';
 }
-function setLabel(id, text, color) {
+function setLabel(id, text) {
   const el = document.getElementById(id); if (!el) return;
   el.textContent = text;
-  if (color) el.style.color = color;
 }
 
 // ─────────────────────────────────────────────────────────
-// REFRESH ORCHESTRATION
+// REFRESH
 // ─────────────────────────────────────────────────────────
-async function refreshAll() {
-  await fetchSheets();
-}
+async function refreshAll() { await fetchSheets(); }
 
-let priceInterval  = null;
-let sheetsInterval = null;
+let priceInterval = null, sheetsInterval = null;
 
 function startPolling() {
   stopPolling();
-  fetchSheets();                               // immediate
-  priceInterval  = setInterval(fetchPrices,  10_000);   // every 10s
-  sheetsInterval = setInterval(fetchSheets,  30_000);   // every 30s
+  fetchSheets();
+  priceInterval  = setInterval(fetchPrices,  10_000);
+  sheetsInterval = setInterval(fetchSheets,  30_000);
 }
-
 function stopPolling() {
   if (priceInterval)  clearInterval(priceInterval);
   if (sheetsInterval) clearInterval(sheetsInterval);
@@ -915,13 +1218,15 @@ function stopPolling() {
 // INIT
 // ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Mezclar localStorage sobre los defaults hardcodeados (permite override manual)
+  try {
+    const stored = JSON.parse(localStorage.getItem(CFG_KEY));
+    if (stored && stored.sheetId) cfg = stored;
+  } catch(e) {}
   loadConfig();
-  if (cfg.sheetId) {
-    document.getElementById('cfg-overlay').style.display = 'none';
-    startPolling();
-  }
-  // Hide cancel if no config yet
-  document.getElementById('cfg-cancel').style.display = cfg.sheetId ? 'block' : 'none';
+  document.getElementById('cfg-overlay').style.display = 'none';
+  document.getElementById('cfg-cancel').style.display = 'block';
+  startPolling();
 });
 </script>
 </body>
