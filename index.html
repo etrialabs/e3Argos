@@ -116,10 +116,6 @@
   .card-accent-gold  { border-left: 2px solid rgba(201,169,110,0.5); }
 
   /* ── Section labels ── */
-  .section-label {
-    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em;
-    color: var(--e-muted); text-transform: uppercase; font-family: 'Lato', sans-serif;
-  }
   .card-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.6rem 1rem; border-bottom: 1px solid var(--e-border);
@@ -133,10 +129,14 @@
   /* ── KPI ── */
   .kpi-val {
     font-family: 'Cormorant Garamond', serif;
-    font-size: clamp(1.2rem, 2.5vw, 1.8rem); font-weight: 700;
+    font-size: clamp(1.5rem, 3vw, 2.4rem); font-weight: 700;
     letter-spacing: -0.02em; line-height: 1.1;
   }
-  .kpi-label { font-size: 0.6rem; color: var(--e-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 3px; }
+  .kpi-label { font-size: 0.68rem; color: var(--e-faint); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 4px; }
+  .section-label {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em;
+    color: var(--e-muted); text-transform: uppercase; font-family: 'Lato', sans-serif;
+  }
 
   /* ── Flash ── */
   @keyframes flash-up   { 0%{ background: rgba(13,179,117,0.12) } 100%{ background: transparent } }
@@ -229,7 +229,7 @@
   /* ── Bottom section (Grid levels + Trades side by side) ── */
   .bottom-section {
     display: grid;
-    grid-template-columns: 750px 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 1rem;
     align-items: start;
   }
@@ -401,8 +401,8 @@
         <span>Activo</span>
         <span class="text-right">Precio</span>
         <span class="text-right">Grid Profit</span>
-        <span class="text-right">Reserva USDT (€)</span>
         <span class="text-right">Deployed (€)</span>
+        <span class="text-right">Reserva USDT (€)</span>
       </div>
 
       <!-- Asset rows (scrollable) -->
@@ -412,11 +412,11 @@
 
       <!-- Total row (fixed at bottom) -->
       <div id="asset-total" class="asset-total-row grid px-4" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr; gap:0.5rem; padding-top:8px; padding-bottom:8px; flex-shrink:0; display:none">
-        <div class="mono" style="font-weight:700; font-size:0.8rem; color:var(--e-gold)" id="total-portfolio-val"></div>
-        <div></div>
+        <div class="mono" style="font-size:0.68rem;color:var(--e-faint);letter-spacing:0.06em;text-transform:uppercase;align-self:center">Total</div>
+        <div class="text-right mono" style="font-weight:700; font-size:0.88rem; color:var(--e-gold)" id="total-portfolio-val"></div>
         <div class="text-right mono price-up" style="font-weight:700; font-size:0.78rem" id="total-grid-profit-val"></div>
-        <div class="text-right mono" style="color:var(--e-bone); font-size:0.78rem" id="total-reserve-val"></div>
         <div class="text-right mono" style="color:var(--e-bone); font-size:0.78rem" id="total-deployed-val"></div>
+        <div class="text-right mono" style="color:var(--e-bone); font-size:0.78rem" id="total-reserve-val"></div>
       </div>
     </div>
 
@@ -813,17 +813,19 @@ function renderAssets() {
       ? `<span class="dot-live" style="width:6px;height:6px;display:inline-block;margin-right:5px;flex-shrink:0"></span>`
       : `<span class="dot-idle" style="width:6px;height:6px;display:inline-block;margin-right:5px;flex-shrink:0"></span>`;
 
+    const ticker = asset.substring(0, 3).toUpperCase();
+    const coinBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(201,169,110,0.1);border:1px solid rgba(201,169,110,0.2);font-size:0.45rem;font-weight:700;color:var(--e-gold-dk);margin-right:6px;flex-shrink:0;letter-spacing:0">${ticker}</span>`;
     return `<div class="asset-row grid px-4 items-center"
                  style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:0.5rem;padding-top:9px;padding-bottom:9px">
       <div style="display:flex;align-items:center">
-        ${statusDot}
+        ${statusDot}${coinBadge}
         <span style="font-weight:700;font-size:0.82rem">${asset}</span>
         ${!init ? '<span style="font-size:0.58rem;color:var(--e-faint);margin-left:4px">INIT</span>' : ''}
       </div>
       <div class="text-right mono text-sm price-${dir}">${priceStr}</div>
       <div class="text-right mono text-sm ${colorClass(gridProfit)}">${fmtMoney(gridProfit)}</div>
-      <div class="text-right mono text-sm" style="color:var(--e-bone)">${fmtMoney(reserveVal)}</div>
       <div class="text-right mono text-sm" style="color:var(--e-bone)">${deployed !== null ? fmtMoney(deployed) : '—'}</div>
+      <div class="text-right mono text-sm" style="color:var(--e-bone)">${fmtMoney(reserveVal)}</div>
     </div>`;
   }).join('');
 
@@ -866,11 +868,15 @@ function renderGridLevels() {
     const priceGlow  = price >= sellLevel ? 'rgba(232,64,64,0.5)' : price <= buyLevel ? 'rgba(13,179,117,0.5)' : 'rgba(201,169,110,0.5)';
     const gpClass    = colorClass(gridProfit);
 
+    const ticker = asset.substring(0, 3).toUpperCase();
     return `<div class="level-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div>
-          <span style="font-weight:700;font-size:0.88rem">${asset}</span>
-          <span style="font-size:0.65rem;color:var(--e-faint);margin-left:7px">${(profit*100).toFixed(2)}% / grid</span>
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(201,169,110,0.1);border:1px solid rgba(201,169,110,0.22);font-size:0.48rem;font-weight:700;color:var(--e-gold-dk);flex-shrink:0;letter-spacing:0">${ticker}</span>
+          <div>
+            <span style="font-weight:700;font-size:0.88rem">${asset}</span>
+            <span style="font-size:0.65rem;color:var(--e-faint);margin-left:6px">${(profit*100).toFixed(2)}% / grid</span>
+          </div>
         </div>
         <div style="font-family:'Cormorant Garamond',serif;font-weight:700;color:${priceColor};font-size:1rem">${fmtPrice(price)}</div>
       </div>
