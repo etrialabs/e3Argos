@@ -237,6 +237,19 @@
   @media (max-width: 1100px) { .bottom-section { grid-template-columns: 1fr; } }
   @media (max-width: 900px)  { .main-grid { grid-template-columns: 1fr !important; } .hide-sm { display:none!important; } }
   @media (max-width: 600px)  { .kpi-val { font-size: 1.1rem; } .hide-xs { display:none!important; } }
+  /* ── Mobile responsive ── */
+  @media (max-width: 680px) {
+    #kpi-bar { grid-template-columns: 1fr 1fr !important; gap: 0.5rem !important; }
+    #kpi-bar > div:first-child { grid-column: 1 / -1; }
+    main { padding: 0.6rem !important; }
+    .main-grid > div { height: auto !important; min-height: 260px; }
+    .etria-header { padding: 0.5rem 0.75rem; }
+  }
+  @media (max-width: 420px) {
+    #kpi-bar { grid-template-columns: 1fr !important; }
+    #kpi-bar > div:first-child { grid-column: 1; }
+    .bottom-section { gap: 0.6rem !important; }
+  }
 </style>
 </head>
 <body>
@@ -324,7 +337,7 @@
     </div>
 
     <!-- 2. Rentabilidad + Alpha BTC -->
-    <div class="card" style="padding:1rem 1.25rem">
+    <div id="kpi-rent-card" class="card" style="padding:1rem 1.25rem">
       <p class="section-label" style="margin-bottom:5px">Rentabilidad</p>
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:0.75rem">
         <div>
@@ -468,6 +481,7 @@
           <span id="trade-count-label" style="font-size:0.65rem; color:var(--e-faint)">—</span>
           <div style="display:flex; gap:3px">
             <button class="tab-btn active" id="tf-all"  onclick="setTradeFilter(this,'ALL')">Todos</button>
+            <button class="tab-btn"        id="tf-bs"   onclick="setTradeFilter(this,'BS')">B/S</button>
             <button class="tab-btn"        id="tf-buy"  onclick="setTradeFilter(this,'BUY')">BUY</button>
             <button class="tab-btn"        id="tf-sell" onclick="setTradeFilter(this,'SELL')">SELL</button>
           </div>
@@ -556,6 +570,22 @@ function fmtMoney(eurVal) {
 }
 
 function fmtPct(v) { const n = parseFloat(v)||0; return (n>=0?'+':'')+n.toFixed(2)+'%'; }
+
+// Convert USDT value → EUR  (USDT ≈ 1 USD; fxRates.USD = USD per 1 EUR)
+function fromUsdt(v) { return (parseFloat(v) || 0) / (state.fxRates.USD || 1.08); }
+
+// Coin logo helpers
+function _logoErr(img) {
+  const wrap = img.parentNode; if (!wrap) return;
+  const tk = wrap.dataset.ticker || '';
+  const sz = parseInt(wrap.style.width) || 20;
+  wrap.innerHTML = `<span style="font-size:${Math.round(sz*0.42)}px;font-weight:700;color:#9A7A48;letter-spacing:0">${tk}</span>`;
+}
+function coinLogoHtml(ticker, size) {
+  size = size || 20;
+  const sym = ticker.toLowerCase();
+  return `<span data-ticker="${ticker}" style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;background:rgba(201,169,110,0.08);border:1px solid rgba(201,169,110,0.15);overflow:hidden;flex-shrink:0;"><img src="https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/32/color/${sym}.png" style="width:${size}px;height:${size}px" loading="lazy" onerror="_logoErr(this)"></span>`;
+}
 
 // ─────────────────────────────────────────────────────────
 // CSV PARSING
@@ -659,8 +689,8 @@ function calcCurrentHoldValue() {
 
 function calcCurrentBTCHold() {
   if (!state.btcHoldQty) return null;
-  const btcPx = state.prices['BTCUSDT']?.price;
-  return btcPx ? state.btcHoldQty * btcPx : null;
+  const btcPx = state.prices['BTCUSDT']?.price; // in USDT
+  return btcPx ? (state.btcHoldQty * btcPx) / (state.fxRates.USD || 1.08) : null; // → EUR
 }
 
 // ─────────────────────────────────────────────────────────
@@ -693,7 +723,8 @@ async function fetchSheets() {
         const klines = await fetchBTCKlines(t0Ms, t0Ms + 4 * 3600000);
         if (klines.length) {
           state.btcT0Price = klines[0].v;
-          state.btcHoldQty = (5000 * (1 - 0.0005)) / state.btcT0Price;
+          const usdCap = 5000 * (state.fxRates.USD || 1.08); // EUR → USDT
+          state.btcHoldQty = (usdCap * (1 - 0.0005)) / state.btcT0Price;
         }
       } catch(e) { console.warn('[E3Argos] BTC klines error:', e); }
     }
@@ -733,13 +764,21 @@ function renderKPIs() {
   const profitFromTrades = state.tradeRows
     .filter(r => r.type === 'SELL')
     .reduce((s, r) => s + (parseFloat(r.pnl_eur)||0), 0);
-  const profit = profitFromTrades !== 0 ? profitFromTrades : parseFloat(d?.total_grid_profit||0);
+  const profit = fromUsdt(profitFromTrades !== 0 ? profitFromTrades : parseFloat(d?.total_grid_profit||0));
 
-  const portfolio = parseFloat(d?.total_portfolio_eur || 0);
-  const fees      = parseFloat(d?.total_fees || 0);
+  const portfolio = fromUsdt(parseFloat(d?.total_portfolio_eur || 0));
+  const fees      = fromUsdt(parseFloat(d?.total_fees || 0));
   const pnlPct    = parseFloat(d?.total_pnl_pct || 0);
   const trades    = state.tradeRows.filter(r => r.type === 'BUY' || r.type === 'SELL').length;
   const assets    = d?.active_assets ? d.active_assets.split(',').filter(Boolean).length : 0;
+
+  // Dynamic border on Rentabilidad card
+  const rentCard = document.getElementById('kpi-rent-card');
+  if (rentCard) {
+    if (pnlPct > 0)      rentCard.style.borderLeft = '3px solid var(--e-green)';
+    else if (pnlPct < 0) rentCard.style.borderLeft = '3px solid var(--e-red)';
+    else                 rentCard.style.borderLeft = '';
+  }
 
   if (!d && !state.tradeRows.length) {
     ['kpi-portfolio','kpi-profit','kpi-pnl-pct','kpi-trades','kpi-fees','kpi-assets',
@@ -799,10 +838,10 @@ function renderAssets() {
     const price      = pInfo ? pInfo.price : null;
     const dir        = pInfo ? pInfo.dir : 'neu';
     const priceStr   = price !== null ? fmtPrice(price) : '—';
-    const gridProfit = parseFloat(row.gridProfit || 0);
-    const reserveVal = parseFloat(row.reserveVal || 0);  // Reserva USDT en EUR
+    const gridProfit = fromUsdt(parseFloat(row.gridProfit || 0)); // USDT → EUR
+    const reserveVal = fromUsdt(parseFloat(row.reserveVal || 0)); // USDT → EUR
     const qty        = parseFloat(row.qty || 0);
-    const deployed   = price !== null ? qty * price : null;  // posición activa
+    const deployed   = price !== null ? fromUsdt(qty * price) : null; // USDT → EUR
     const init       = row.initialized === 'TRUE';
 
     totalGridProfit += gridProfit;
@@ -813,8 +852,8 @@ function renderAssets() {
       ? `<span class="dot-live" style="width:6px;height:6px;display:inline-block;margin-right:5px;flex-shrink:0"></span>`
       : `<span class="dot-idle" style="width:6px;height:6px;display:inline-block;margin-right:5px;flex-shrink:0"></span>`;
 
-    const ticker = asset.substring(0, 3).toUpperCase();
-    const coinBadge = `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(201,169,110,0.1);border:1px solid rgba(201,169,110,0.2);font-size:0.45rem;font-weight:700;color:var(--e-gold-dk);margin-right:6px;flex-shrink:0;letter-spacing:0">${ticker}</span>`;
+    const ticker = asset.toUpperCase();
+    const coinBadge = `<span style="margin-right:6px">${coinLogoHtml(ticker, 20)}</span>`;
     return `<div class="asset-row grid px-4 items-center"
                  style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:0.5rem;padding-top:9px;padding-bottom:9px">
       <div style="display:flex;align-items:center">
@@ -831,7 +870,7 @@ function renderAssets() {
 
   // Total row
   if (totalEl) {
-    const portfolioVal = parseFloat(state.dashRow?.total_portfolio_eur || 0);
+    const portfolioVal = fromUsdt(parseFloat(state.dashRow?.total_portfolio_eur || 0));
     document.getElementById('total-portfolio-val').textContent = portfolioVal > 0 ? fmtMoney(portfolioVal) : fmtMoney(totalDeployed + totalReserve);
     document.getElementById('total-grid-profit-val').textContent = fmtMoney(totalGridProfit);
     document.getElementById('total-reserve-val').textContent = fmtMoney(totalReserve);
@@ -868,11 +907,11 @@ function renderGridLevels() {
     const priceGlow  = price >= sellLevel ? 'rgba(232,64,64,0.5)' : price <= buyLevel ? 'rgba(13,179,117,0.5)' : 'rgba(201,169,110,0.5)';
     const gpClass    = colorClass(gridProfit);
 
-    const ticker = asset.substring(0, 3).toUpperCase();
+    const ticker = asset.toUpperCase();
     return `<div class="level-card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:7px">
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(201,169,110,0.1);border:1px solid rgba(201,169,110,0.22);font-size:0.48rem;font-weight:700;color:var(--e-gold-dk);flex-shrink:0;letter-spacing:0">${ticker}</span>
+          ${coinLogoHtml(ticker, 24)}
           <div>
             <span style="font-weight:700;font-size:0.88rem">${asset}</span>
             <span style="font-size:0.65rem;color:var(--e-faint);margin-left:6px">${(profit*100).toFixed(2)}% / grid</span>
@@ -914,6 +953,8 @@ function renderTrades() {
   const el = document.getElementById('trade-list');
   const filtered = state.tradeFilter === 'ALL'
     ? state.tradeRows
+    : state.tradeFilter === 'BS'
+    ? state.tradeRows.filter(r => r.type === 'BUY' || r.type === 'SELL')
     : state.tradeRows.filter(r => r.type === state.tradeFilter);
   document.getElementById('trade-count-label').textContent = `${filtered.length} trades`;
   if (!filtered.length) {
@@ -922,11 +963,11 @@ function renderTrades() {
   }
   el.innerHTML = filtered.slice(0, 300).map(row => {
     const type   = row.type || '—';
-    const price  = parseFloat(row.price_eur    || 0);
+    const price  = parseFloat(row.price_eur    || 0);          // USDT/unit — display as-is
     const qty    = parseFloat(row.qty          || 0);
-    const value  = parseFloat(row.value_eur    || 0);
-    const pnl    = parseFloat(row.pnl_eur      || 0);
-    const cap    = parseFloat(row.capital_total_eur || 0);
+    const value  = fromUsdt(parseFloat(row.value_eur    || 0)); // USDT → EUR
+    const pnl    = fromUsdt(parseFloat(row.pnl_eur      || 0)); // USDT → EUR
+    const cap    = fromUsdt(parseFloat(row.capital_total_eur || 0)); // USDT → EUR
     const badge  = type==='BUY' ? '<span class="badge-buy">BUY</span>' : type==='SELL' ? '<span class="badge-sell">SELL</span>' : '<span class="badge-init">INIT</span>';
     const pnlStr = type==='SELL' ? `<span class="${colorClass(pnl)} mono">${fmtMoney(pnl)}</span>` : '<span style="color:var(--e-faint)">—</span>';
     return `<div class="trade-row grid px-4 py-2 items-center gap-2"
@@ -961,7 +1002,7 @@ async function renderChart() {
   // Strategy line from trade history
   let stratData = state.tradeRows
     .filter(r => (r.type==='SELL'||r.type==='BUY') && r.capital_total_eur && r.timestamp)
-    .map(r => ({ t: new Date(r.timestamp), v: parseFloat(r.capital_total_eur) }))
+    .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(r.capital_total_eur)) })) // USDT → EUR
     .sort((a,b) => a.t - b.t);
 
   if (stratData.length < 1) {
@@ -1005,9 +1046,10 @@ async function renderChart() {
   if (btcKlines.length && state.btcHoldQty) {
     // Use the BTC price at btcRefMs as reference
     const btcRefPrice = btcKlines[0].v || state.btcT0Price || 1;
-    const btcQtyFromInit = (5000 * (1 - 0.0005)) / btcRefPrice;
+    const usdCapChart = 5000 * (state.fxRates.USD || 1.08); // 5000 EUR → USDT
+    const btcQtyFromInit = (usdCapChart * (1 - 0.0005)) / btcRefPrice;
     btcKlines.forEach(k => {
-      btcLineData.push({ x: new Date(k.t), y: btcQtyFromInit * k.v });
+      btcLineData.push({ x: new Date(k.t), y: (btcQtyFromInit * k.v) / (state.fxRates.USD || 1.08) }); // USDT → EUR
     });
   }
 
