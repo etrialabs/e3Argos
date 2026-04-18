@@ -571,8 +571,8 @@ function fmtMoney(eurVal) {
 
 function fmtPct(v) { const n = parseFloat(v)||0; return (n>=0?'+':'')+n.toFixed(2)+'%'; }
 
-// Convert USDT value → EUR  (USDT ≈ 1 USD; fxRates.USD = USD per 1 EUR)
-function fromUsdt(v) { return (parseFloat(v) || 0) / (state.fxRates.USD || 1.08); }
+// Los valores _eur del GSheet se usan directamente, sin conversión de tipo de cambio
+function fromUsdt(v) { return parseFloat(v) || 0; }
 
 // Coin logo helpers
 function _logoErr(img) {
@@ -690,7 +690,7 @@ function calcCurrentHoldValue() {
 function calcCurrentBTCHold() {
   if (!state.btcHoldQty) return null;
   const btcPx = state.prices['BTCUSDT']?.price; // in USDT
-  return btcPx ? (state.btcHoldQty * btcPx) / (state.fxRates.USD || 1.08) : null; // → EUR
+  return btcPx ? state.btcHoldQty * btcPx : null; // valor en USDT (misma escala que valores GSheet)
 }
 
 // ─────────────────────────────────────────────────────────
@@ -723,8 +723,8 @@ async function fetchSheets() {
         const klines = await fetchBTCKlines(t0Ms, t0Ms + 4 * 3600000);
         if (klines.length) {
           state.btcT0Price = klines[0].v;
-          const usdCap = 5000 * (state.fxRates.USD || 1.08); // EUR → USDT
-          state.btcHoldQty = (usdCap * (1 - 0.0005)) / state.btcT0Price;
+          // Capital inicial 5000 en la misma unidad que el GSheet; BTC price en USDT ≈ misma escala
+          state.btcHoldQty = (5000 * (1 - 0.0005)) / state.btcT0Price;
         }
       } catch(e) { console.warn('[E3Argos] BTC klines error:', e); }
     }
@@ -838,10 +838,10 @@ function renderAssets() {
     const price      = pInfo ? pInfo.price : null;
     const dir        = pInfo ? pInfo.dir : 'neu';
     const priceStr   = price !== null ? fmtPrice(price) : '—';
-    const gridProfit = fromUsdt(parseFloat(row.gridProfit || 0)); // USDT → EUR
-    const reserveVal = fromUsdt(parseFloat(row.reserveVal || 0)); // USDT → EUR
+    const gridProfit = fromUsdt(parseFloat(row.gridProfit || 0)); // valor GSheet (sin conversión)
+    const reserveVal = fromUsdt(parseFloat(row.reserveVal || 0)); // valor GSheet (sin conversión)
     const qty        = parseFloat(row.qty || 0);
-    const deployed   = price !== null ? fromUsdt(qty * price) : null; // USDT → EUR
+    const deployed   = price !== null ? fromUsdt(qty * price) : null; // valor GSheet (sin conversión)
     const init       = row.initialized === 'TRUE';
 
     totalGridProfit += gridProfit;
@@ -965,9 +965,9 @@ function renderTrades() {
     const type   = row.type || '—';
     const price  = parseFloat(row.price_eur    || 0);          // USDT/unit — display as-is
     const qty    = parseFloat(row.qty          || 0);
-    const value  = fromUsdt(parseFloat(row.value_eur    || 0)); // USDT → EUR
-    const pnl    = fromUsdt(parseFloat(row.pnl_eur      || 0)); // USDT → EUR
-    const cap    = fromUsdt(parseFloat(row.capital_total_eur || 0)); // USDT → EUR
+    const value  = fromUsdt(parseFloat(row.value_eur    || 0)); // valor GSheet (sin conversión)
+    const pnl    = fromUsdt(parseFloat(row.pnl_eur      || 0)); // valor GSheet (sin conversión)
+    const cap    = fromUsdt(parseFloat(row.capital_total_eur || 0)); // valor GSheet (sin conversión)
     const badge  = type==='BUY' ? '<span class="badge-buy">BUY</span>' : type==='SELL' ? '<span class="badge-sell">SELL</span>' : '<span class="badge-init">INIT</span>';
     const pnlStr = type==='SELL' ? `<span class="${colorClass(pnl)} mono">${fmtMoney(pnl)}</span>` : '<span style="color:var(--e-faint)">—</span>';
     return `<div class="trade-row grid px-4 py-2 items-center gap-2"
@@ -1002,7 +1002,7 @@ async function renderChart() {
   // Strategy line from trade history
   let stratData = state.tradeRows
     .filter(r => (r.type==='SELL'||r.type==='BUY') && r.capital_total_eur && r.timestamp)
-    .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(r.capital_total_eur)) })) // USDT → EUR
+    .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(r.capital_total_eur)) })) // valor GSheet (sin conversión)
     .sort((a,b) => a.t - b.t);
 
   if (stratData.length < 1) {
@@ -1046,10 +1046,9 @@ async function renderChart() {
   if (btcKlines.length && state.btcHoldQty) {
     // Use the BTC price at btcRefMs as reference
     const btcRefPrice = btcKlines[0].v || state.btcT0Price || 1;
-    const usdCapChart = 5000 * (state.fxRates.USD || 1.08); // 5000 EUR → USDT
-    const btcQtyFromInit = (usdCapChart * (1 - 0.0005)) / btcRefPrice;
+    const btcQtyFromInit = (5000 * (1 - 0.0005)) / btcRefPrice;
     btcKlines.forEach(k => {
-      btcLineData.push({ x: new Date(k.t), y: (btcQtyFromInit * k.v) / (state.fxRates.USD || 1.08) }); // USDT → EUR
+      btcLineData.push({ x: new Date(k.t), y: btcQtyFromInit * k.v }); // misma escala que estrategia
     });
   }
 
