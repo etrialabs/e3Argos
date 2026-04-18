@@ -250,6 +250,60 @@
     #kpi-bar > div:first-child { grid-column: 1; }
     .bottom-section { gap: 0.6rem !important; }
   }
+
+  /* ── F1c Multisim Panel ── */
+  .sim-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;
+  }
+  @media (max-width: 1100px) { .sim-grid { grid-template-columns: 1fr; } }
+  .sim-card {
+    background: var(--e-panel); border: 1px solid var(--e-border);
+    border-radius: 6px; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem;
+    transition: border-color 0.18s;
+  }
+  .sim-card.active { border-color: rgba(201,169,110,0.55); box-shadow: 0 0 0 1px rgba(201,169,110,0.25); }
+  .sim-card-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    padding-bottom: 0.4rem; border-bottom: 1px solid var(--e-border);
+  }
+  .sim-title {
+    font-family: 'Cormorant Garamond', serif; font-size: 1.05rem; font-weight: 700;
+    color: var(--e-gold); letter-spacing: 0.1em;
+  }
+  .sim-badge {
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--e-muted); padding: 2px 6px; border: 1px solid var(--e-border2); border-radius: 3px;
+  }
+  .sim-badge.active { color: var(--e-gold); border-color: rgba(201,169,110,0.5); background: var(--e-gold08); }
+  .sim-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+  .sim-label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; color: var(--e-muted); text-transform: uppercase; margin-bottom: 3px; display: block; }
+  .sim-input {
+    width: 100%; background: var(--e-carbon); border: 1px solid var(--e-border2);
+    border-radius: 4px; color: var(--e-bone); font-family: ui-monospace, monospace;
+    font-size: 0.72rem; padding: 5px 7px; outline: none; transition: border-color 0.15s;
+  }
+  .sim-input:focus { border-color: var(--e-gold); }
+  .sim-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+  .sim-btn {
+    flex: 1; padding: 6px 10px; font-size: 0.7rem; font-weight: 700;
+    border-radius: 4px; cursor: pointer; font-family: 'Lato', sans-serif;
+    transition: all 0.15s; border: 1px solid;
+  }
+  .sim-btn-run { color: var(--e-bone); border-color: var(--e-border2); background: var(--e-raised); }
+  .sim-btn-run:hover { color: var(--e-gold); border-color: rgba(201,169,110,0.4); }
+  .sim-btn-activate { color: var(--e-gold); border-color: rgba(201,169,110,0.4); background: var(--e-gold08); }
+  .sim-btn-activate:hover { background: var(--e-gold15); }
+  .sim-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .sim-result {
+    margin-top: 0.4rem; padding: 6px 8px; border-radius: 4px;
+    background: var(--e-carbon); border: 1px solid var(--e-border);
+    font-family: ui-monospace, monospace; font-size: 0.68rem;
+    color: var(--e-muted); min-height: 28px; max-height: 110px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .sim-result.ok { color: var(--e-green); border-color: rgba(13,179,117,0.3); }
+  .sim-result.err { color: var(--e-red); border-color: rgba(232,64,64,0.3); }
+  .sim-result.loading { color: var(--e-gold); border-color: rgba(201,169,110,0.3); }
 </style>
 </head>
 <body>
@@ -279,10 +333,10 @@
     </div>
 
     <div class="flex items-center gap-2">
-      <!-- Currency selector -->
+      <!-- Currency selector (base técnica USD, conversor visual a EUR/JPY) -->
       <div class="flex items-center gap-0.5" style="border:1px solid var(--e-border); border-radius:5px; padding:2px">
-        <button class="cur-btn active" onclick="setCurrency('EUR')">EUR</button>
-        <button class="cur-btn" onclick="setCurrency('USD')">USD</button>
+        <button class="cur-btn active" onclick="setCurrency('USD')">USD</button>
+        <button class="cur-btn" onclick="setCurrency('EUR')">EUR</button>
         <button class="cur-btn" onclick="setCurrency('JPY')">JPY</button>
       </div>
       <button onclick="refreshAll()" class="btn-ghost">
@@ -314,6 +368,11 @@
         <label class="cfg-label">Cloud Run URL (optimizer)</label>
         <input id="inp-cloud-url" class="cfg-input" placeholder="https://optimizer-xxxx-ew.a.run.app" autocomplete="off" style="width:100%">
         <p style="font-size:0.65rem;color:var(--e-faint);margin-top:4px">El dashboard leerá los datos desde <code style="color:var(--e-gold)">/data</code> — sin depender de acceso público al Sheet</p>
+      </div>
+      <div>
+        <label class="cfg-label">Sim Webhook URL (Apps Script · opcional)</label>
+        <input id="inp-sim-webhook" class="cfg-input" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" style="width:100%">
+        <p style="font-size:0.65rem;color:var(--e-faint);margin-top:4px">Webhook del Apps Script que escribe en la pestaña <code style="color:var(--e-gold)">config_activa</code> al pulsar "Activar". Si se deja vacío, el botón copia al portapapeles.</p>
       </div>
     </div>
     <div class="flex justify-end gap-3 mt-6">
@@ -414,8 +473,8 @@
         <span>Activo</span>
         <span class="text-right">Precio</span>
         <span class="text-right">Grid Profit</span>
-        <span class="text-right">Deployed (€)</span>
-        <span class="text-right">Reserva USDT (€)</span>
+        <span class="text-right">Deployed</span>
+        <span class="text-right">Reserva USDT</span>
       </div>
 
       <!-- Asset rows (scrollable) -->
@@ -499,6 +558,30 @@
     </div>
 
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       F1c · MULTISIM LAB (3 sims paralelas A/B/C)
+       ────────────────────────────────────────────────────────────
+       Cada sim se envía al endpoint / del Optimizer con overrides.
+       La respuesta se muestra en el bloque .sim-result correspondiente.
+       El botón "Activar" escribe en config_activa del Sheet vía Apps Script
+       webhook (SIM_WEBHOOK_URL, configurable en ⚙ Config).
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="card" style="overflow:hidden; margin-top:1rem">
+    <div class="card-header">
+      <span class="section-label">Multisim Lab · F1c</span>
+      <div style="display:flex; align-items:center; gap:0.6rem">
+        <span id="active-sim-label" class="mono" style="font-size:0.65rem; color:var(--e-faint)">Activa: —</span>
+        <button class="btn-ghost" onclick="reloadConfigActiva()" title="Recargar config activa del Sheet">↻</button>
+      </div>
+    </div>
+
+    <div style="padding: 0.85rem 1rem 1rem">
+      <div class="sim-grid" id="sim-grid">
+        <!-- cards A/B/C inyectadas por JS en renderSimPanels() -->
+      </div>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -510,7 +593,8 @@ const CFG_KEY = 'e3argos_cfg_v3';
 // URL del endpoint /data del optimizer en Cloud Run
 // Cámbiala en el panel de Config (⚙ Config) si fuera necesario
 let cfg = {
-  cloudUrl: 'https://optimizer-253723725213.europe-west1.run.app'
+  cloudUrl:   'https://optimizer-253723725213.europe-west1.run.app',
+  simWebhook: ''   // Apps Script URL que escribe en config_activa — opcional
 };
 
 let state = {
@@ -521,22 +605,50 @@ let state = {
   tradeFilter:  'ALL',
   chartPeriod:  'all',
   equityChart:  null,
-  currency:     'EUR',
-  fxRates:      { EUR: 1, USD: 1.08, JPY: 165 },
+  // Moneda de visualización. Base técnica = USD (USDT); los valores del GSheet
+  // están ya en USD. Las conversiones a EUR/JPY son meramente visuales.
+  currency:     'USD',
+  fxRates:      { USD: 1, EUR: 0.92, JPY: 152 },
   btcHoldQty:   null,
   btcT0Price:   null,
   holdPositions: {},   // asset → { qty, initPrice }
   holdInitValue: 0,
+
+  // ── F1c Multisim ─────────────────────────────────────────
+  configActiva: [],    // filas leídas del tab config_activa del Sheet
+  simResults:   {},    // { A: {result|err|loading}, B: {...}, C: {...} }
+  simInputs: {        // valores actualmente en los <input> de cada panel
+    A: defaultSimInputs('A'),
+    B: defaultSimInputs('B'),
+    C: defaultSimInputs('C'),
+  },
 };
+
+// Valores por defecto razonables para cada sim (A=Pro estable, B=más agresiva, C=conservadora)
+function defaultSimInputs(simId) {
+  const presets = {
+    A: { universe:'BTC,ETH,SOL,BNB,ADA,XRP,SOL,LINK', n_coins:5, capital_usd:5000,
+         ema_fast:20, ema_slow:50, timeframe:'4h', corr_threshold:0.80, profit_multiplier:0.8 },
+    B: { universe:'BTC,ETH,SOL,AVAX,MATIC,LINK,DOT,APT',  n_coins:5, capital_usd:5000,
+         ema_fast:12, ema_slow:26, timeframe:'1h', corr_threshold:0.75, profit_multiplier:1.0 },
+    C: { universe:'BTC,ETH,BNB,SOL',                       n_coins:3, capital_usd:5000,
+         ema_fast:50, ema_slow:200, timeframe:'1d', corr_threshold:0.85, profit_multiplier:0.6 },
+  };
+  return presets[simId] || presets.A;
+}
 
 // ─────────────────────────────────────────────────────────
 // CONFIG OVERLAY
 // ─────────────────────────────────────────────────────────
 function loadConfig() {
-  document.getElementById('inp-cloud-url').value = cfg.cloudUrl || '';
+  document.getElementById('inp-cloud-url').value   = cfg.cloudUrl   || '';
+  const simInp = document.getElementById('inp-sim-webhook');
+  if (simInp) simInp.value = cfg.simWebhook || '';
 }
 function saveConfig() {
   cfg.cloudUrl = document.getElementById('inp-cloud-url').value.trim().replace(/\/$/, '');
+  const simInp = document.getElementById('inp-sim-webhook');
+  if (simInp) cfg.simWebhook = simInp.value.trim().replace(/\/$/, '');
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
   closeConfig(); refreshAll();
 }
@@ -554,25 +666,42 @@ function setCurrency(cur) {
 
 async function fetchFxRates() {
   try {
-    const r = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json');
+    // Base USD: API devuelve tasa USD→EUR, USD→JPY, etc.
+    const r = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json');
     const data = await r.json();
-    state.fxRates = { EUR: 1, USD: data.eur.usd || 1.08, JPY: data.eur.jpy || 165 };
+    state.fxRates = {
+      USD: 1,
+      EUR: data.usd.eur || 0.92,
+      JPY: data.usd.jpy || 152,
+    };
   } catch(e) { /* keep defaults */ }
 }
 
-function toDisplay(eurVal) { return (parseFloat(eurVal) || 0) * (state.fxRates[state.currency] || 1); }
+// Convierte un valor USD (base técnica) al currency visual actual.
+function toDisplay(usdVal) { return (parseFloat(usdVal) || 0) * (state.fxRates[state.currency] || 1); }
 
-function fmtMoney(eurVal) {
-  const v = toDisplay(eurVal);
-  const sym = { EUR:'€', USD:'$', JPY:'¥' }[state.currency] || '€';
+function fmtMoney(usdVal) {
+  const v = toDisplay(usdVal);
+  const sym = { EUR:'€', USD:'$', JPY:'¥' }[state.currency] || '$';
   if (state.currency === 'JPY') return Math.round(v).toLocaleString('ja-JP') + ' ' + sym;
   return v.toLocaleString('es-ES', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' ' + sym;
 }
 
 function fmtPct(v) { const n = parseFloat(v)||0; return (n>=0?'+':'')+n.toFixed(2)+'%'; }
 
-// Los valores _eur del GSheet se usan directamente, sin conversión de tipo de cambio
+// Identidad: los valores *_usd del GSheet ya están en USD (la API de Binance
+// cotiza contra USDT). Esta función existe para conservar el punto de extensión
+// por si en el futuro hubiera que normalizar (e.g. pares USDC).
 function fromUsdt(v) { return parseFloat(v) || 0; }
+
+// Helper de compatibilidad retro: acepta fila con clave _usd (canonical) o _eur (legacy).
+// Usar con CAUTION: retornar raw; el parseFloat ocurre en el caller.
+function vUsd(row, base) {
+  if (!row) return 0;
+  const v = row[base + '_usd'];
+  if (v !== undefined && v !== null && v !== '') return v;
+  return row[base + '_eur'] || 0;
+}
 
 // Coin logo helpers
 function _logoErr(img) {
@@ -667,12 +796,12 @@ function buildHoldPositions() {
   // We approximate by summing all INIT trade quantities per asset
   const positions = {};
   state.tradeRows
-    .filter(r => r.type === 'INIT' && parseFloat(r.qty||0) > 0 && parseFloat(r.price_eur||0) > 0)
+    .filter(r => r.type === 'INIT' && parseFloat(r.qty||0) > 0 && parseFloat(vUsd(r, 'price')) > 0)
     .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
     .forEach(t => {
       if (!positions[t.asset]) positions[t.asset] = { qty: 0, initPrice: 0, sym: t.asset + 'USDT' };
       positions[t.asset].qty += parseFloat(t.qty || 0);
-      positions[t.asset].initPrice = parseFloat(t.price_eur || 0); // latest init price
+      positions[t.asset].initPrice = parseFloat(vUsd(t, 'price')); // latest init price in USD
     });
   state.holdPositions = positions;
   state.holdInitValue = Object.values(positions).reduce((s, p) => s + p.qty * p.initPrice, 0);
@@ -733,6 +862,9 @@ async function fetchSheets() {
     const dashRows = data.dashboard_live || [];
     state.dashRow = dashRows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
 
+    // ── CONFIG_ACTIVA (F1c) ─────────────────────────────────
+    state.configActiva = Array.isArray(data.config_activa) ? data.config_activa : [];
+
     // ── Update UI ──────────────────────────────────────────
     setDotState('sheets-dot', 'live');
     document.getElementById('pill-sheets').className = 'status-pill live';
@@ -740,6 +872,7 @@ async function fetchSheets() {
     setLabel('sheets-label', `Datos ${fmtTime(now)}`);
     document.getElementById('ts-update').textContent = fmtTime(now);
     renderKPIs(); renderAssets(); renderTrades(); renderChart(); renderGridLevels();
+    renderSimPanels();
     fetchPrices();
     const cycleId = state.dashRow ? (state.dashRow.last_cycle_id || state.dashRow.optimizer_ts || '') : '';
     document.getElementById('cycle-badge').textContent = cycleId ? `Ciclo: ${cycleId}` : '—';
@@ -763,10 +896,10 @@ function renderKPIs() {
   // Falls back to DASHBOARD_LIVE value if no trades yet
   const profitFromTrades = state.tradeRows
     .filter(r => r.type === 'SELL')
-    .reduce((s, r) => s + (parseFloat(r.pnl_eur)||0), 0);
+    .reduce((s, r) => s + (parseFloat(vUsd(r, 'pnl'))||0), 0);
   const profit = fromUsdt(profitFromTrades !== 0 ? profitFromTrades : parseFloat(d?.total_grid_profit||0));
 
-  const portfolio = fromUsdt(parseFloat(d?.total_portfolio_eur || 0));
+  const portfolio = fromUsdt(parseFloat(vUsd(d, 'total_portfolio')));
   const fees      = fromUsdt(parseFloat(d?.total_fees || 0));
   const pnlPct    = parseFloat(d?.total_pnl_pct || 0);
   const trades    = state.tradeRows.filter(r => r.type === 'BUY' || r.type === 'SELL').length;
@@ -870,7 +1003,7 @@ function renderAssets() {
 
   // Total row
   if (totalEl) {
-    const portfolioVal = fromUsdt(parseFloat(state.dashRow?.total_portfolio_eur || 0));
+    const portfolioVal = fromUsdt(parseFloat(vUsd(state.dashRow, 'total_portfolio')));
     document.getElementById('total-portfolio-val').textContent = portfolioVal > 0 ? fmtMoney(portfolioVal) : fmtMoney(totalDeployed + totalReserve);
     document.getElementById('total-grid-profit-val').textContent = fmtMoney(totalGridProfit);
     document.getElementById('total-reserve-val').textContent = fmtMoney(totalReserve);
@@ -963,11 +1096,11 @@ function renderTrades() {
   }
   el.innerHTML = filtered.slice(0, 300).map(row => {
     const type   = row.type || '—';
-    const price  = parseFloat(row.price_eur    || 0);          // USDT/unit — display as-is
-    const qty    = parseFloat(row.qty          || 0);
-    const value  = fromUsdt(parseFloat(row.value_eur    || 0)); // valor GSheet (sin conversión)
-    const pnl    = fromUsdt(parseFloat(row.pnl_eur      || 0)); // valor GSheet (sin conversión)
-    const cap    = fromUsdt(parseFloat(row.capital_total_eur || 0)); // valor GSheet (sin conversión)
+    const price  = parseFloat(vUsd(row, 'price'));          // USDT/unit
+    const qty    = parseFloat(row.qty || 0);
+    const value  = fromUsdt(parseFloat(vUsd(row, 'value')));
+    const pnl    = fromUsdt(parseFloat(vUsd(row, 'pnl')));
+    const cap    = fromUsdt(parseFloat(vUsd(row, 'capital_total')));
     const badge  = type==='BUY' ? '<span class="badge-buy">BUY</span>' : type==='SELL' ? '<span class="badge-sell">SELL</span>' : '<span class="badge-init">INIT</span>';
     const pnlStr = type==='SELL' ? `<span class="${colorClass(pnl)} mono">${fmtMoney(pnl)}</span>` : '<span style="color:var(--e-faint)">—</span>';
     return `<div class="trade-row grid px-4 py-2 items-center gap-2"
@@ -999,10 +1132,10 @@ async function renderChart() {
   const emptyEl = document.getElementById('chart-empty');
   if (state.equityChart) { state.equityChart.destroy(); state.equityChart = null; }
 
-  // Strategy line from trade history
+  // Strategy line from trade history (USD canónico, con fallback a EUR legacy)
   let stratData = state.tradeRows
-    .filter(r => (r.type==='SELL'||r.type==='BUY') && r.capital_total_eur && r.timestamp)
-    .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(r.capital_total_eur)) })) // valor GSheet (sin conversión)
+    .filter(r => (r.type==='SELL'||r.type==='BUY') && (r.capital_total_usd || r.capital_total_eur) && r.timestamp)
+    .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(vUsd(r, 'capital_total'))) }))
     .sort((a,b) => a.t - b.t);
 
   if (stratData.length < 1) {
@@ -1123,6 +1256,262 @@ function setDotState(id, s) {
   el.className=`dot-${s}`; el.style.cssText='width:8px;height:8px;flex-shrink:0;display:inline-block';
 }
 function setLabel(id, text) { const el=document.getElementById(id); if(el) el.textContent=text; }
+
+// ═════════════════════════════════════════════════════════
+// F1c — MULTISIM LAB
+// ═════════════════════════════════════════════════════════
+
+// Lee el simId actualmente marcado como activo en config_activa (campo `sim_id`
+// de la fila cuyo campo `active` sea "TRUE" / true / 1).
+function getActiveSimId() {
+  const rows = state.configActiva || [];
+  for (const row of rows) {
+    const act = String(row.active || row.is_active || '').trim().toLowerCase();
+    if (act === 'true' || act === '1' || act === 'yes' || act === 'sí' || act === 'si') {
+      return (row.sim_id || row.id || '').toString().toUpperCase().trim();
+    }
+  }
+  return null;
+}
+
+// Devuelve los overrides declarados en config_activa para un simId concreto (si existen).
+function getSimConfigRow(simId) {
+  return (state.configActiva || []).find(
+    r => String(r.sim_id || r.id || '').toUpperCase().trim() === simId
+  ) || null;
+}
+
+// Construye el HTML de las 3 cards A/B/C. Se llama tras cada fetchSheets.
+function renderSimPanels() {
+  const host = document.getElementById('sim-grid');
+  if (!host) return;
+
+  const activeId = getActiveSimId();
+  setLabel('active-sim-label', activeId ? `Activa: ${activeId}` : 'Activa: —');
+
+  const html = ['A', 'B', 'C'].map(simId => {
+    const inp    = state.simInputs[simId] || defaultSimInputs(simId);
+    const row    = getSimConfigRow(simId);
+    // Si la config_activa tiene valores para este sim, úsalos para rellenar los inputs
+    // (pero sólo si el usuario no los ha tocado aún: la única forma de detectarlo es el primer render;
+    // mantenemos state.simInputs como fuente de verdad tras el primer render).
+    if (row && !state.simInputs[simId]._touched) {
+      ['universe','n_coins','capital_usd','ema_fast','ema_slow','timeframe','corr_threshold','profit_multiplier']
+        .forEach(k => { if (row[k] !== undefined && row[k] !== '') inp[k] = row[k]; });
+    }
+    const isActive = activeId === simId;
+    const res = state.simResults[simId];
+    return `
+      <div class="sim-card ${isActive ? 'active' : ''}">
+        <div class="sim-card-header">
+          <span class="sim-title">SIM ${simId}</span>
+          <span class="sim-badge ${isActive ? 'active' : ''}">${isActive ? '● ACTIVA' : 'inactiva'}</span>
+        </div>
+        <div>
+          <label class="sim-label">Universe (CSV)</label>
+          <input class="sim-input" data-sim="${simId}" data-k="universe"
+                 value="${escapeHtml(inp.universe)}" placeholder="BTC,ETH,SOL" oninput="onSimInput(event)">
+        </div>
+        <div class="sim-row">
+          <div>
+            <label class="sim-label">N coins</label>
+            <input class="sim-input" type="number" min="1" max="20" data-sim="${simId}" data-k="n_coins"
+                   value="${inp.n_coins}" oninput="onSimInput(event)">
+          </div>
+          <div>
+            <label class="sim-label">Capital USD</label>
+            <input class="sim-input" type="number" min="100" step="100" data-sim="${simId}" data-k="capital_usd"
+                   value="${inp.capital_usd}" oninput="onSimInput(event)">
+          </div>
+        </div>
+        <div class="sim-row">
+          <div>
+            <label class="sim-label">EMA fast</label>
+            <input class="sim-input" type="number" min="2" max="200" data-sim="${simId}" data-k="ema_fast"
+                   value="${inp.ema_fast}" oninput="onSimInput(event)">
+          </div>
+          <div>
+            <label class="sim-label">EMA slow</label>
+            <input class="sim-input" type="number" min="5" max="400" data-sim="${simId}" data-k="ema_slow"
+                   value="${inp.ema_slow}" oninput="onSimInput(event)">
+          </div>
+        </div>
+        <div class="sim-row">
+          <div>
+            <label class="sim-label">Timeframe</label>
+            <select class="sim-input" data-sim="${simId}" data-k="timeframe" onchange="onSimInput(event)">
+              ${['15m','1h','4h','1d'].map(tf =>
+                `<option value="${tf}" ${tf===inp.timeframe?'selected':''}>${tf}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="sim-label">Corr threshold</label>
+            <input class="sim-input" type="number" min="0.1" max="0.99" step="0.05"
+                   data-sim="${simId}" data-k="corr_threshold"
+                   value="${inp.corr_threshold}" oninput="onSimInput(event)">
+          </div>
+        </div>
+        <div>
+          <label class="sim-label">Profit multiplier (×ATR)</label>
+          <input class="sim-input" type="number" min="0.1" max="3" step="0.05"
+                 data-sim="${simId}" data-k="profit_multiplier"
+                 value="${inp.profit_multiplier}" oninput="onSimInput(event)">
+        </div>
+        <div class="sim-actions">
+          <button class="sim-btn sim-btn-run" onclick="runSim('${simId}')"
+                  ${res && res.loading ? 'disabled' : ''}>
+            ${res && res.loading ? '⟳ Ejecutando…' : '▶ Simular'}
+          </button>
+          <button class="sim-btn sim-btn-activate" onclick="activateSim('${simId}')"
+                  ${isActive ? 'disabled' : ''}>
+            ${isActive ? '✓ Activa' : '★ Activar'}
+          </button>
+        </div>
+        <div class="sim-result ${res ? (res.err ? 'err' : (res.loading ? 'loading' : 'ok')) : ''}"
+             id="sim-result-${simId}">${renderSimResult(res)}</div>
+      </div>
+    `;
+  }).join('');
+
+  host.innerHTML = html;
+}
+
+function renderSimResult(res) {
+  if (!res)             return '—';
+  if (res.loading)      return '⟳ Ejecutando en Cloud Run…';
+  if (res.err)          return `❌ ${escapeHtml(res.err)}`;
+  const r = res.result || {};
+  // El Optimizer devuelve { cycle_id, tier, top_n, assets:[{asset, weight, capital_usd, reserve_pct, profit_per_grid, ...}], ... }
+  const top = Array.isArray(r.assets) ? r.assets.slice(0, 6) : [];
+  const lines = [];
+  if (r.tier)     lines.push(`Tier: ${r.tier}   top_n: ${r.top_n ?? '—'}`);
+  if (r.cycle_id) lines.push(`Ciclo: ${r.cycle_id}`);
+  if (top.length) {
+    lines.push('Assets seleccionados:');
+    top.forEach(a => {
+      const reserve = (a.reserve_pct != null) ? (a.reserve_pct * 100).toFixed(0) + '%' : '—';
+      const profit  = (a.profit_per_grid != null) ? (a.profit_per_grid * 100).toFixed(2) + '%' : '—';
+      lines.push(`  ${String(a.asset||'?').padEnd(6)} ${Number(a.capital_usd||0).toFixed(0).padStart(6)} USD  R:${reserve}  P:${profit}`);
+    });
+  }
+  return escapeHtml(lines.join('\n') || JSON.stringify(r, null, 2).slice(0, 500));
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Handler de cambios en cualquier input del panel → actualiza state.simInputs
+function onSimInput(ev) {
+  const el = ev.target;
+  const simId = el.dataset.sim;
+  const k     = el.dataset.k;
+  if (!simId || !k) return;
+  const obj = state.simInputs[simId] || (state.simInputs[simId] = defaultSimInputs(simId));
+  // Coerción ligera a número cuando aplique
+  let v = el.value;
+  if (['n_coins','ema_fast','ema_slow','capital_usd'].includes(k)) v = parseInt(v, 10);
+  else if (['corr_threshold','profit_multiplier'].includes(k))       v = parseFloat(v);
+  obj[k] = v;
+  obj._touched = true;
+}
+
+// Ejecuta la simulación contra el Optimizer: POST a cfg.cloudUrl con body JSON
+async function runSim(simId) {
+  if (!cfg.cloudUrl) { alert('Configura primero la Cloud Run URL en ⚙ Config'); return; }
+  const inp = state.simInputs[simId];
+  if (!inp) return;
+  state.simResults[simId] = { loading: true };
+  renderSimPanels();
+
+  // Universe: string CSV → array de uppercase
+  const universeArr = typeof inp.universe === 'string'
+    ? inp.universe.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)
+    : (Array.isArray(inp.universe) ? inp.universe : []);
+
+  const body = {
+    sim_id:      simId,
+    capital_usd: Number(inp.capital_usd) || 5000,
+    overrides: {
+      universe:          universeArr,
+      n_coins:           Number(inp.n_coins),
+      ema_fast:          Number(inp.ema_fast),
+      ema_slow:          Number(inp.ema_slow),
+      timeframe:         String(inp.timeframe),
+      corr_threshold:    Number(inp.corr_threshold),
+      profit_multiplier: Number(inp.profit_multiplier),
+    },
+    dry_run: true,   // el Optimizer debe calcular sin escribir en ESTADO_ACTUAL
+  };
+
+  try {
+    const r = await fetch(cfg.cloudUrl + '/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    const txt = await r.text();
+    let json; try { json = JSON.parse(txt); } catch { json = { raw: txt }; }
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${json.error || json.raw || txt.slice(0,200)}`);
+    state.simResults[simId] = { result: json };
+  } catch(e) {
+    state.simResults[simId] = { err: e.message || String(e) };
+  }
+  renderSimPanels();
+}
+
+// Marca simId como activo — requiere el webhook de Apps Script.
+async function activateSim(simId) {
+  const inp = state.simInputs[simId];
+  if (!inp) return;
+  const payload = {
+    action: 'activate_sim',
+    sim_id: simId,
+    config: {
+      universe:          typeof inp.universe === 'string' ? inp.universe : (inp.universe || []).join(','),
+      n_coins:           Number(inp.n_coins),
+      capital_usd:       Number(inp.capital_usd),
+      ema_fast:          Number(inp.ema_fast),
+      ema_slow:          Number(inp.ema_slow),
+      timeframe:         String(inp.timeframe),
+      corr_threshold:    Number(inp.corr_threshold),
+      profit_multiplier: Number(inp.profit_multiplier),
+    },
+    activated_at: new Date().toISOString(),
+  };
+
+  if (!cfg.simWebhook) {
+    // Fallback: copiar al portapapeles para pegar manualmente en config_activa
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      alert(`No hay Sim Webhook configurado.\n\nPayload copiado al portapapeles — pégalo manualmente en la pestaña config_activa del Sheet.`);
+    } catch {
+      alert('No hay Sim Webhook y el portapapeles no está disponible. Configura el webhook en ⚙ Config.');
+    }
+    return;
+  }
+
+  try {
+    const r = await fetch(cfg.simWebhook, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error(`Webhook HTTP ${r.status}`);
+    // Refresca para que /data vuelva a leer config_activa
+    await fetchSheets();
+  } catch(e) {
+    alert(`No se pudo activar SIM ${simId}: ${e.message}`);
+  }
+}
+
+function reloadConfigActiva() {
+  // Forzar que los próximos renders vuelvan a poblar desde la row si `_touched` es false
+  // (no tocamos los inputs ya modificados por el usuario).
+  fetchSheets();
+}
 
 // ─────────────────────────────────────────────────────────
 // POLLING & INIT
