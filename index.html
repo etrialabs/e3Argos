@@ -251,11 +251,16 @@
     .bottom-section { gap: 0.6rem !important; }
   }
 
-  /* ── F1c Multisim Panel ── */
-  .sim-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;
+  /* ── Multi-sim Tab Buttons ── */
+  .sim-tab-btn {
+    padding: 4px 12px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+    border-radius: 4px; cursor: pointer; font-family: 'Lato', sans-serif;
+    color: var(--e-faint); background: transparent;
+    border: 1px solid var(--e-border); transition: all 0.15s;
   }
-  @media (max-width: 1100px) { .sim-grid { grid-template-columns: 1fr; } }
+  .sim-tab-btn:hover { color: var(--e-gold); border-color: rgba(201,169,110,0.4); }
+  .sim-tab-btn.active { color: var(--e-gold); background: var(--e-gold08); border-color: rgba(201,169,110,0.5); }
+  /* ── (legacy — kept to avoid breaking references) ── */
   .sim-card {
     background: var(--e-panel); border: 1px solid var(--e-border);
     border-radius: 6px; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem;
@@ -498,8 +503,8 @@
         <div style="display:flex;align-items:center;gap:8px">
           <span class="section-label">Curva de Capital</span>
           <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem">
-            <span style="display:inline-block;width:18px;height:2px;background:#0DB375;border-radius:1px"></span><span style="color:var(--e-faint)">Estrategia</span>
-            <span style="display:inline-block;width:18px;height:2px;background:#F59E0B;border-radius:1px;opacity:0.8"></span><span style="color:var(--e-faint)">BTC Hold</span>
+            <span style="display:inline-block;width:18px;height:2.5px;background:#0DB375;border-radius:1px"></span><span style="color:var(--e-faint)" id="chart-sim-label">Estrategia</span>
+            <span style="display:inline-block;width:18px;height:1.5px;background:#F59E0B;border-radius:1px;opacity:0.8;border-top:1.5px dashed #F59E0B;background:transparent"></span><span style="color:var(--e-faint)">BTC Hold</span>
           </div>
         </div>
         <div style="display:flex; gap:3px">
@@ -560,27 +565,21 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════
-       F1c · MULTISIM LAB (3 sims paralelas A/B/C)
-       ────────────────────────────────────────────────────────────
-       Cada sim se envía al endpoint / del Optimizer con overrides.
-       La respuesta se muestra en el bloque .sim-result correspondiente.
-       El botón "Activar" escribe en config_activa del Sheet vía Apps Script
-       webhook (SIM_WEBHOOK_URL, configurable en ⚙ Config).
+       NAVEGACIÓN MULTI-SIM — Selector de simulación activa
        ══════════════════════════════════════════════════════════════ -->
-  <div class="card" style="overflow:hidden; margin-top:1rem">
-    <div class="card-header">
-      <span class="section-label">Multisim Lab · F1c</span>
-      <div style="display:flex; align-items:center; gap:0.6rem">
-        <span id="active-sim-label" class="mono" style="font-size:0.65rem; color:var(--e-faint)">Activa: —</span>
-        <button class="btn-ghost" onclick="reloadConfigActiva()" title="Recargar config activa del Sheet">↻</button>
-      </div>
-    </div>
-
-    <div style="padding: 0.85rem 1rem 1rem">
-      <div class="sim-grid" id="sim-grid">
-        <!-- cards A/B/C inyectadas por JS en renderSimPanels() -->
-      </div>
-    </div>
+  <div style="margin-top:1rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
+    <span style="font-size:0.65rem; color:var(--e-faint); letter-spacing:0.06em; text-transform:uppercase">Sim:</span>
+    <button class="sim-tab-btn active" id="simtab-DEFAULT" onclick="switchSim('DEFAULT')">DEFAULT</button>
+    <span id="simtab-sep-A" style="display:none">
+      <button class="sim-tab-btn" id="simtab-A" onclick="switchSim('A')">SIM A</button>
+    </span>
+    <span id="simtab-sep-B" style="display:none">
+      <button class="sim-tab-btn" id="simtab-B" onclick="switchSim('B')">SIM B</button>
+    </span>
+    <span id="simtab-sep-C" style="display:none">
+      <button class="sim-tab-btn" id="simtab-C" onclick="switchSim('C')">SIM C</button>
+    </span>
+    <span id="sim-active-badge" style="font-size:0.65rem; color:var(--e-faint); margin-left:0.5rem"></span>
   </div>
 </main>
 
@@ -598,44 +597,24 @@ let cfg = {
 };
 
 let state = {
-  assetRows:    [],
+  activeSim:    'DEFAULT',  // 'DEFAULT' | 'A' | 'B' | 'C'
+  assetRows:    [],         // datos de la sim activa
   tradeRows:    [],
   dashRow:      null,
+  simsData:     {},         // { A: {assetRows,tradeRows,dashRow}, B:{...}, C:{...} }
   prices:       {},
   tradeFilter:  'ALL',
   chartPeriod:  'all',
   equityChart:  null,
-  // Moneda de visualización. Base técnica = USD (USDT); los valores del GSheet
-  // están ya en USD. Las conversiones a EUR/JPY son meramente visuales.
+  // Moneda de visualización. Base técnica = USD (USDT)
   currency:     'USD',
   fxRates:      { USD: 1, EUR: 0.92, JPY: 152 },
   btcHoldQty:   null,
   btcT0Price:   null,
-  holdPositions: {},   // asset → { qty, initPrice }
+  holdPositions: {},
   holdInitValue: 0,
-
-  // ── F1c Multisim ─────────────────────────────────────────
-  configActiva: [],    // filas leídas del tab config_activa del Sheet
-  simResults:   {},    // { A: {result|err|loading}, B: {...}, C: {...} }
-  simInputs: {        // valores actualmente en los <input> de cada panel
-    A: defaultSimInputs('A'),
-    B: defaultSimInputs('B'),
-    C: defaultSimInputs('C'),
-  },
+  configActiva: [],
 };
-
-// Valores por defecto razonables para cada sim (A=Pro estable, B=más agresiva, C=conservadora)
-function defaultSimInputs(simId) {
-  const presets = {
-    A: { universe:'BTC,ETH,SOL,BNB,ADA,XRP,SOL,LINK', n_coins:5, capital_usd:5000,
-         ema_fast:20, ema_slow:50, timeframe:'4h', corr_threshold:0.80, profit_multiplier:0.8 },
-    B: { universe:'BTC,ETH,SOL,AVAX,MATIC,LINK,DOT,APT',  n_coins:5, capital_usd:5000,
-         ema_fast:12, ema_slow:26, timeframe:'1h', corr_threshold:0.75, profit_multiplier:1.0 },
-    C: { universe:'BTC,ETH,BNB,SOL',                       n_coins:3, capital_usd:5000,
-         ema_fast:50, ema_slow:200, timeframe:'1d', corr_threshold:0.85, profit_multiplier:0.6 },
-  };
-  return presets[simId] || presets.A;
-}
 
 // ─────────────────────────────────────────────────────────
 // CONFIG OVERLAY
@@ -834,13 +813,37 @@ async function fetchSheets() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
 
-    // ── ESTADO_ACTUAL ──────────────────────────────────────
-    state.assetRows = (data.estado_actual || []).filter(r => r.asset && r.asset !== 'asset');
-
-    // ── TRADE_HISTORY ──────────────────────────────────────
-    state.tradeRows = (data.trade_history || [])
+    // ── DATOS DEFAULT ──────────────────────────────────────
+    const defaultAssets = (data.estado_actual || []).filter(r => r.asset && r.asset !== 'asset');
+    const defaultTrades = (data.trade_history || [])
       .filter(r => r.timestamp && r.timestamp !== 'timestamp')
       .reverse();
+    const defaultDash = (data.dashboard_live || [])
+      .find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
+
+    // ── DATOS POR SIM (A/B/C) ──────────────────────────────
+    state.simsData = {};
+    const simsRaw = data.sims || {};
+    for (const sid of ['A','B','C']) {
+      if (simsRaw[sid]) {
+        state.simsData[sid] = {
+          assetRows: (simsRaw[sid].estado_actual || []).filter(r => r.asset && r.asset !== 'asset'),
+          tradeRows: (simsRaw[sid].trade_history || [])
+            .filter(r => r.timestamp && r.timestamp !== 'timestamp')
+            .reverse(),
+          dashRow: (simsRaw[sid].dashboard_live || [])
+            .find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null,
+        };
+      }
+    }
+
+    // ── CONFIG_ACTIVA ─────────────────────────────────────
+    state.configActiva = Array.isArray(data.config_activa) ? data.config_activa : [];
+
+    // Guardar datos DEFAULT para switchSim
+    state._rawDefault = { assetRows: defaultAssets, tradeRows: defaultTrades, dashRow: defaultDash };
+    // Aplicar sim activa
+    _applySimData(defaultAssets, defaultTrades, defaultDash);
 
     buildHoldPositions();
 
@@ -848,22 +851,13 @@ async function fetchSheets() {
     if (initTrades.length && !state.btcHoldQty) {
       const t0Ms = Math.min(...initTrades.map(r => new Date(r.timestamp).getTime()));
       try {
-        // Use a 4-hour window to guarantee at least one 15m/1h kline is returned
         const klines = await fetchBTCKlines(t0Ms, t0Ms + 4 * 3600000);
         if (klines.length) {
           state.btcT0Price = klines[0].v;
-          // Capital inicial 5000 en la misma unidad que el GSheet; BTC price en USDT ≈ misma escala
           state.btcHoldQty = (5000 * (1 - 0.0005)) / state.btcT0Price;
         }
       } catch(e) { console.warn('[E3Argos] BTC klines error:', e); }
     }
-
-    // ── DASHBOARD_LIVE ──────────────────────────────────────
-    const dashRows = data.dashboard_live || [];
-    state.dashRow = dashRows.find(r => r.updated_at && r.updated_at !== 'updated_at' && r.updated_at !== 'NOT_STARTED') || null;
-
-    // ── CONFIG_ACTIVA (F1c) ─────────────────────────────────
-    state.configActiva = Array.isArray(data.config_activa) ? data.config_activa : [];
 
     // ── Update UI ──────────────────────────────────────────
     setDotState('sheets-dot', 'live');
@@ -871,8 +865,8 @@ async function fetchSheets() {
     const now = new Date();
     setLabel('sheets-label', `Datos ${fmtTime(now)}`);
     document.getElementById('ts-update').textContent = fmtTime(now);
+    _renderSimTabs();
     renderKPIs(); renderAssets(); renderTrades(); renderChart(); renderGridLevels();
-    renderSimPanels();
     fetchPrices();
     const cycleId = state.dashRow ? (state.dashRow.last_cycle_id || state.dashRow.optimizer_ts || '') : '';
     document.getElementById('cycle-badge').textContent = cycleId ? `Ciclo: ${cycleId}` : '—';
@@ -1132,7 +1126,7 @@ async function renderChart() {
   const emptyEl = document.getElementById('chart-empty');
   if (state.equityChart) { state.equityChart.destroy(); state.equityChart = null; }
 
-  // Strategy line from trade history (USD canónico, con fallback a EUR legacy)
+  // ── Línea principal: sim activa ───────────────────────────────────────
   let stratData = state.tradeRows
     .filter(r => (r.type==='SELL'||r.type==='BUY') && (r.capital_total_usd || r.capital_total_eur) && r.timestamp)
     .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(vUsd(r, 'capital_total'))) }))
@@ -1153,15 +1147,13 @@ async function renderChart() {
 
   emptyEl.style.display = 'none'; canvas.style.display = 'block';
 
-  // BTC reference starts from first INIT trade (not first strategy point)
+  // BTC reference desde primer INIT
   const initTrades = state.tradeRows.filter(r => r.type === 'INIT' && r.timestamp);
   const btcRefMs = initTrades.length
     ? Math.min(...initTrades.map(r => new Date(r.timestamp).getTime()))
     : stratData[0].t.getTime();
-
   const tnMs = stratData[stratData.length-1].t.getTime() || Date.now();
 
-  // Fetch BTC klines from INIT timestamp to end of strategy data (min 4h window)
   const btcKlines = await fetchBTCKlines(btcRefMs, Math.max(tnMs, btcRefMs + 4 * 3600000));
 
   const stratVals = stratData.map(d => d.v);
@@ -1174,31 +1166,33 @@ async function renderChart() {
   grad.addColorStop(0, isPos ? 'rgba(13,179,117,0.25)' : 'rgba(232,64,64,0.25)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
 
-  // BTC Hold line anchored to INIT timestamp
+  // BTC Hold
   let btcLineData = [];
-  if (btcKlines.length && state.btcHoldQty) {
-    // Use the BTC price at btcRefMs as reference
+  if (btcKlines.length) {
     const btcRefPrice = btcKlines[0].v || state.btcT0Price || 1;
-    const btcQtyFromInit = (5000 * (1 - 0.0005)) / btcRefPrice;
-    btcKlines.forEach(k => {
-      btcLineData.push({ x: new Date(k.t), y: btcQtyFromInit * k.v }); // misma escala que estrategia
-    });
+    const btcQty = (first / btcRefPrice);   // normalizado al capital inicial de la sim
+    btcKlines.forEach(k => btcLineData.push({ x: new Date(k.t), y: btcQty * k.v }));
   }
 
-  const labels = stratData.map(d => d.t.toLocaleDateString('es-ES', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }));
+  const labels = stratData.map(d =>
+    d.t.toLocaleDateString('es-ES', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+  );
 
+  // ── Dataset principal — sim activa (línea gruesa) ─────────────────────
+  const simLabel = state.activeSim === 'DEFAULT' ? 'DEFAULT' : `SIM ${state.activeSim}`;
   const datasets = [
     {
-      label: 'Estrategia',
+      label: simLabel,
       data: stratVals,
       borderColor: isPos ? '#0DB375' : '#E84040',
-      borderWidth: 1.5, backgroundColor: grad, fill: true, tension: 0.35,
+      borderWidth: 2.5, backgroundColor: grad, fill: true, tension: 0.35,
       pointRadius: stratData.length < 40 ? 3 : 0, pointHoverRadius: 5,
       pointBackgroundColor: isPos ? '#0DB375' : '#E84040',
       pointBorderColor: '#080808', pointBorderWidth: 1.5,
     }
   ];
 
+  // ── BTC Hold (línea punteada ámbar) ───────────────────────────────────
   if (btcLineData.length > 1) {
     datasets.push({
       label: 'BTC Hold',
@@ -1209,6 +1203,35 @@ async function renderChart() {
     });
   }
 
+  // ── Otras sims activas (líneas finas de comparación) ─────────────────
+  const SIM_COLORS = { DEFAULT:'#7C3AED', A:'#3B82F6', B:'#F97316', C:'#EC4899' };
+  const otherSims = Object.keys(state.simsData).filter(s => s !== state.activeSim);
+  for (const sid of otherSims) {
+    const simTrades = (state.simsData[sid]?.tradeRows || [])
+      .filter(r => (r.type==='SELL'||r.type==='BUY') && (r.capital_total_usd||r.capital_total_eur) && r.timestamp)
+      .map(r => ({ t: new Date(r.timestamp), v: fromUsdt(parseFloat(vUsd(r, 'capital_total'))) }))
+      .sort((a,b) => a.t - b.t);
+    if (simTrades.length < 2) continue;
+
+    // Interpolar/alinear a los mismos labels (aproximación: closest timestamp)
+    const simVals = stratData.map(d => {
+      const closest = simTrades.reduce((prev, cur) =>
+        Math.abs(cur.t - d.t) < Math.abs(prev.t - d.t) ? cur : prev
+      );
+      return Math.abs(closest.t - d.t) < 3600000 * 6 ? closest.v : null;
+    });
+
+    if (simVals.filter(v => v !== null).length < 2) continue;
+    const col = SIM_COLORS[sid] || '#9CA3AF';
+    datasets.push({
+      label: `SIM ${sid}`,
+      data: simVals,
+      borderColor: col, borderWidth: 1, borderDash: [2,3],
+      backgroundColor: 'transparent', fill: false, tension: 0.35,
+      pointRadius: 0, pointHoverRadius: 3, spanGaps: true,
+    });
+  }
+
   state.equityChart = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
@@ -1216,7 +1239,10 @@ async function renderChart() {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 400, easing: 'easeOutQuart' },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: datasets.length > 2,
+          labels: { color:'#7A756D', font:{ family:"'Courier New',monospace", size:9 }, boxWidth:14, padding:12 }
+        },
         tooltip: {
           backgroundColor: '#1C1C1C', borderColor: '#332E28', borderWidth: 1,
           titleColor: '#7A756D', bodyColor: '#F2EDE3', padding: 9,
@@ -1258,259 +1284,64 @@ function setDotState(id, s) {
 function setLabel(id, text) { const el=document.getElementById(id); if(el) el.textContent=text; }
 
 // ═════════════════════════════════════════════════════════
-// F1c — MULTISIM LAB
+// MULTI-SIM — Navegación y comparación en gráfico
 // ═════════════════════════════════════════════════════════
 
-// Lee el simId actualmente marcado como activo en config_activa (campo `sim_id`
-// de la fila cuyo campo `active` sea "TRUE" / true / 1).
-function getActiveSimId() {
-  const rows = state.configActiva || [];
-  for (const row of rows) {
-    const act = String(row.active || row.is_active || '').trim().toLowerCase();
-    if (act === 'true' || act === '1' || act === 'yes' || act === 'sí' || act === 'si') {
-      return (row.sim_id || row.id || '').toString().toUpperCase().trim();
-    }
+/**
+ * _applySimData — carga los datos correctos en state.assetRows/tradeRows/dashRow
+ * según la sim activa. Se llama desde fetchSheets y desde switchSim.
+ */
+function _applySimData(defaultAssets, defaultTrades, defaultDash) {
+  const sid = state.activeSim;
+  if (sid === 'DEFAULT' || !state.simsData[sid]) {
+    state.assetRows = defaultAssets;
+    state.tradeRows = defaultTrades;
+    state.dashRow   = defaultDash;
+  } else {
+    const s = state.simsData[sid];
+    state.assetRows = s.assetRows;
+    state.tradeRows = s.tradeRows;
+    state.dashRow   = s.dashRow;
   }
-  return null;
 }
 
-// Devuelve los overrides declarados en config_activa para un simId concreto (si existen).
-function getSimConfigRow(simId) {
-  return (state.configActiva || []).find(
-    r => String(r.sim_id || r.id || '').toUpperCase().trim() === simId
-  ) || null;
+/** Muestra/oculta los botones de tab según qué sims tienen datos. */
+function _renderSimTabs() {
+  ['A','B','C'].forEach(sid => {
+    const sep = document.getElementById(`simtab-sep-${sid}`);
+    if (sep) sep.style.display = state.simsData[sid] ? 'inline' : 'none';
+  });
+  // Marcar activo
+  ['DEFAULT','A','B','C'].forEach(sid => {
+    const btn = document.getElementById(`simtab-${sid}`);
+    if (btn) btn.classList.toggle('active', sid === state.activeSim);
+  });
+  // Badge y label del chart
+  const badge = document.getElementById('sim-active-badge');
+  if (badge) badge.textContent = state.activeSim === 'DEFAULT' ? '' : `· viendo SIM ${state.activeSim}`;
+  const chartLbl = document.getElementById('chart-sim-label');
+  if (chartLbl) chartLbl.textContent = state.activeSim === 'DEFAULT' ? 'DEFAULT' : `SIM ${state.activeSim}`;
 }
 
-// Construye el HTML de las 3 cards A/B/C. Se llama tras cada fetchSheets.
-function renderSimPanels() {
-  const host = document.getElementById('sim-grid');
-  if (!host) return;
-
-  const activeId = getActiveSimId();
-  setLabel('active-sim-label', activeId ? `Activa: ${activeId}` : 'Activa: —');
-
-  const html = ['A', 'B', 'C'].map(simId => {
-    const inp    = state.simInputs[simId] || defaultSimInputs(simId);
-    const row    = getSimConfigRow(simId);
-    // Si la config_activa tiene valores para este sim, úsalos para rellenar los inputs
-    // (pero sólo si el usuario no los ha tocado aún: la única forma de detectarlo es el primer render;
-    // mantenemos state.simInputs como fuente de verdad tras el primer render).
-    if (row && !state.simInputs[simId]._touched) {
-      ['universe','n_coins','capital_usd','ema_fast','ema_slow','timeframe','corr_threshold','profit_multiplier']
-        .forEach(k => { if (row[k] !== undefined && row[k] !== '') inp[k] = row[k]; });
-    }
-    const isActive = activeId === simId;
-    const res = state.simResults[simId];
-    return `
-      <div class="sim-card ${isActive ? 'active' : ''}">
-        <div class="sim-card-header">
-          <span class="sim-title">SIM ${simId}</span>
-          <span class="sim-badge ${isActive ? 'active' : ''}">${isActive ? '● ACTIVA' : 'inactiva'}</span>
-        </div>
-        <div>
-          <label class="sim-label">Universe (CSV)</label>
-          <input class="sim-input" data-sim="${simId}" data-k="universe"
-                 value="${escapeHtml(inp.universe)}" placeholder="BTC,ETH,SOL" oninput="onSimInput(event)">
-        </div>
-        <div class="sim-row">
-          <div>
-            <label class="sim-label">N coins</label>
-            <input class="sim-input" type="number" min="1" max="20" data-sim="${simId}" data-k="n_coins"
-                   value="${inp.n_coins}" oninput="onSimInput(event)">
-          </div>
-          <div>
-            <label class="sim-label">Capital USD</label>
-            <input class="sim-input" type="number" min="100" step="100" data-sim="${simId}" data-k="capital_usd"
-                   value="${inp.capital_usd}" oninput="onSimInput(event)">
-          </div>
-        </div>
-        <div class="sim-row">
-          <div>
-            <label class="sim-label">EMA fast</label>
-            <input class="sim-input" type="number" min="2" max="200" data-sim="${simId}" data-k="ema_fast"
-                   value="${inp.ema_fast}" oninput="onSimInput(event)">
-          </div>
-          <div>
-            <label class="sim-label">EMA slow</label>
-            <input class="sim-input" type="number" min="5" max="400" data-sim="${simId}" data-k="ema_slow"
-                   value="${inp.ema_slow}" oninput="onSimInput(event)">
-          </div>
-        </div>
-        <div class="sim-row">
-          <div>
-            <label class="sim-label">Timeframe</label>
-            <select class="sim-input" data-sim="${simId}" data-k="timeframe" onchange="onSimInput(event)">
-              ${['15m','1h','4h','1d'].map(tf =>
-                `<option value="${tf}" ${tf===inp.timeframe?'selected':''}>${tf}</option>`).join('')}
-            </select>
-          </div>
-          <div>
-            <label class="sim-label">Corr threshold</label>
-            <input class="sim-input" type="number" min="0.1" max="0.99" step="0.05"
-                   data-sim="${simId}" data-k="corr_threshold"
-                   value="${inp.corr_threshold}" oninput="onSimInput(event)">
-          </div>
-        </div>
-        <div>
-          <label class="sim-label">Profit multiplier (×ATR)</label>
-          <input class="sim-input" type="number" min="0.1" max="3" step="0.05"
-                 data-sim="${simId}" data-k="profit_multiplier"
-                 value="${inp.profit_multiplier}" oninput="onSimInput(event)">
-        </div>
-        <div class="sim-actions">
-          <button class="sim-btn sim-btn-run" onclick="runSim('${simId}')"
-                  ${res && res.loading ? 'disabled' : ''}>
-            ${res && res.loading ? '⟳ Ejecutando…' : '▶ Simular'}
-          </button>
-          <button class="sim-btn sim-btn-activate" onclick="activateSim('${simId}')"
-                  ${isActive ? 'disabled' : ''}>
-            ${isActive ? '✓ Activa' : '★ Activar'}
-          </button>
-        </div>
-        <div class="sim-result ${res ? (res.err ? 'err' : (res.loading ? 'loading' : 'ok')) : ''}"
-             id="sim-result-${simId}">${renderSimResult(res)}</div>
-      </div>
-    `;
-  }).join('');
-
-  host.innerHTML = html;
-}
-
-function renderSimResult(res) {
-  if (!res)             return '—';
-  if (res.loading)      return '⟳ Ejecutando en Cloud Run…';
-  if (res.err)          return `❌ ${escapeHtml(res.err)}`;
-  const r = res.result || {};
-  // El Optimizer devuelve { cycle_id, tier, top_n, assets:[{asset, weight, capital_usd, reserve_pct, profit_per_grid, ...}], ... }
-  const top = Array.isArray(r.assets) ? r.assets.slice(0, 6) : [];
-  const lines = [];
-  if (r.tier)     lines.push(`Tier: ${r.tier}   top_n: ${r.top_n ?? '—'}`);
-  if (r.cycle_id) lines.push(`Ciclo: ${r.cycle_id}`);
-  if (top.length) {
-    lines.push('Assets seleccionados:');
-    top.forEach(a => {
-      const reserve = (a.reserve_pct != null) ? (a.reserve_pct * 100).toFixed(0) + '%' : '—';
-      const profit  = (a.profit_per_grid != null) ? (a.profit_per_grid * 100).toFixed(2) + '%' : '—';
-      lines.push(`  ${String(a.asset||'?').padEnd(6)} ${Number(a.capital_usd||0).toFixed(0).padStart(6)} USD  R:${reserve}  P:${profit}`);
-    });
-  }
-  return escapeHtml(lines.join('\n') || JSON.stringify(r, null, 2).slice(0, 500));
+/** El usuario pulsa un tab de sim. */
+function switchSim(sid) {
+  state.activeSim = sid;
+  // Reconstruir datos desde lo ya cargado (no requiere nueva llamada a /data)
+  const defAssets = state._rawDefault?.assetRows || state.assetRows;
+  const defTrades = state._rawDefault?.tradeRows || state.tradeRows;
+  const defDash   = state._rawDefault?.dashRow   || state.dashRow;
+  _applySimData(defAssets, defTrades, defDash);
+  buildHoldPositions();
+  _renderSimTabs();
+  // Reset BTC hold para recalcular desde t0 de la nueva sim
+  state.btcHoldQty = null; state.btcT0Price = null;
+  renderKPIs(); renderAssets(); renderTrades(); renderChart(); renderGridLevels();
 }
 
 function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
-// Handler de cambios en cualquier input del panel → actualiza state.simInputs
-function onSimInput(ev) {
-  const el = ev.target;
-  const simId = el.dataset.sim;
-  const k     = el.dataset.k;
-  if (!simId || !k) return;
-  const obj = state.simInputs[simId] || (state.simInputs[simId] = defaultSimInputs(simId));
-  // Coerción ligera a número cuando aplique
-  let v = el.value;
-  if (['n_coins','ema_fast','ema_slow','capital_usd'].includes(k)) v = parseInt(v, 10);
-  else if (['corr_threshold','profit_multiplier'].includes(k))       v = parseFloat(v);
-  obj[k] = v;
-  obj._touched = true;
-}
-
-// Ejecuta la simulación contra el Optimizer: POST a cfg.cloudUrl con body JSON
-async function runSim(simId) {
-  if (!cfg.cloudUrl) { alert('Configura primero la Cloud Run URL en ⚙ Config'); return; }
-  const inp = state.simInputs[simId];
-  if (!inp) return;
-  state.simResults[simId] = { loading: true };
-  renderSimPanels();
-
-  // Universe: string CSV → array de uppercase
-  const universeArr = typeof inp.universe === 'string'
-    ? inp.universe.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)
-    : (Array.isArray(inp.universe) ? inp.universe : []);
-
-  const body = {
-    sim_id:      simId,
-    capital_usd: Number(inp.capital_usd) || 5000,
-    overrides: {
-      universe:          universeArr,
-      n_coins:           Number(inp.n_coins),
-      ema_fast:          Number(inp.ema_fast),
-      ema_slow:          Number(inp.ema_slow),
-      timeframe:         String(inp.timeframe),
-      corr_threshold:    Number(inp.corr_threshold),
-      profit_multiplier: Number(inp.profit_multiplier),
-    },
-    dry_run: true,   // el Optimizer debe calcular sin escribir en ESTADO_ACTUAL
-  };
-
-  try {
-    const r = await fetch(cfg.cloudUrl + '/', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-    });
-    const txt = await r.text();
-    let json; try { json = JSON.parse(txt); } catch { json = { raw: txt }; }
-    if (!r.ok) throw new Error(`HTTP ${r.status}: ${json.error || json.raw || txt.slice(0,200)}`);
-    state.simResults[simId] = { result: json };
-  } catch(e) {
-    state.simResults[simId] = { err: e.message || String(e) };
-  }
-  renderSimPanels();
-}
-
-// Marca simId como activo — requiere el webhook de Apps Script.
-async function activateSim(simId) {
-  const inp = state.simInputs[simId];
-  if (!inp) return;
-  const payload = {
-    action: 'activate_sim',
-    sim_id: simId,
-    config: {
-      universe:          typeof inp.universe === 'string' ? inp.universe : (inp.universe || []).join(','),
-      n_coins:           Number(inp.n_coins),
-      capital_usd:       Number(inp.capital_usd),
-      ema_fast:          Number(inp.ema_fast),
-      ema_slow:          Number(inp.ema_slow),
-      timeframe:         String(inp.timeframe),
-      corr_threshold:    Number(inp.corr_threshold),
-      profit_multiplier: Number(inp.profit_multiplier),
-    },
-    activated_at: new Date().toISOString(),
-  };
-
-  if (!cfg.simWebhook) {
-    // Fallback: copiar al portapapeles para pegar manualmente en config_activa
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      alert(`No hay Sim Webhook configurado.\n\nPayload copiado al portapapeles — pégalo manualmente en la pestaña config_activa del Sheet.`);
-    } catch {
-      alert('No hay Sim Webhook y el portapapeles no está disponible. Configura el webhook en ⚙ Config.');
-    }
-    return;
-  }
-
-  try {
-    const r = await fetch(cfg.simWebhook, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    if (!r.ok) throw new Error(`Webhook HTTP ${r.status}`);
-    // Refresca para que /data vuelva a leer config_activa
-    await fetchSheets();
-  } catch(e) {
-    alert(`No se pudo activar SIM ${simId}: ${e.message}`);
-  }
-}
-
-function reloadConfigActiva() {
-  // Forzar que los próximos renders vuelvan a poblar desde la row si `_touched` es false
-  // (no tocamos los inputs ya modificados por el usuario).
-  fetchSheets();
 }
 
 // ─────────────────────────────────────────────────────────
